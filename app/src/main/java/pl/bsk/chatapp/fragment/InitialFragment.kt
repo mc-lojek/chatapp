@@ -38,7 +38,10 @@ class InitialFragment : Fragment() {
     private fun setupOnClicks() {
         requireActivity().findViewById<Button>(R.id.connect_btn).setOnClickListener {
             //todo poprawic to
-            viewModel.connectToServer(requireActivity().findViewById<EditText>(R.id.ip_addr_et).text.toString())
+            val ip = requireActivity().findViewById<EditText>(R.id.ip_addr_et).text.toString()
+            viewModel.serverAddress = ip
+            viewModel.connectToServer(ip)
+
             findNavController().navigate(R.id.action_initialFragment_to_chatFragment)
         }
     }

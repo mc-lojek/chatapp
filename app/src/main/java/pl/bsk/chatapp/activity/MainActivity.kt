@@ -10,6 +10,10 @@ import android.util.Log
 import android.widget.Button
 import androidx.activity.viewModels
 import androidx.fragment.app.activityViewModels
+import androidx.navigation.findNavController
+import androidx.navigation.fragment.findNavController
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import pl.bsk.chatapp.R
 import pl.bsk.chatapp.activity.ClientActivity
 import pl.bsk.chatapp.viewmodel.ClientServerViewModel
@@ -27,7 +31,12 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         askForPermissions()
 
-        viewModel.listenServerConnection()
+        viewModel.listenServerConnection {
+            val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment)
+            runOnUiThread {
+                navHostFragment?.findNavController()?.navigate(R.id.chatFragment)
+            }
+        }
     }
 
     override fun onRequestPermissionsResult(

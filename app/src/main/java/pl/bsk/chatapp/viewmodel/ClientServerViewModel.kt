@@ -25,7 +25,7 @@ class ClientServerViewModel : ViewModel() {
 
     lateinit var inputFromClient: BufferedReader
 
-    fun listenServerConnection() = viewModelScope.launch {
+    fun listenServerConnection(foo: () -> Unit) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
             var socket: Socket?
             try {
@@ -37,7 +37,7 @@ class ClientServerViewModel : ViewModel() {
                     try {
                         Timber.d("tu wszedlem server 2")
                         socket = server2ClientSocket.accept()
-                        viewModelScope.launch { communicateToClient(socket) }
+                        viewModelScope.launch { communicateToClient(socket, foo) }
                         Timber.d("tu wszedlem server3")
                     } catch (e: IOException) {
                         e.printStackTrace()
@@ -51,7 +51,7 @@ class ClientServerViewModel : ViewModel() {
         }
     }
 
-    suspend fun communicateToClient(clientSocket: Socket) {
+    suspend fun communicateToClient(clientSocket: Socket, foo: () -> Unit) {
         withContext(Dispatchers.IO) {
             try {
                 inputFromClient = BufferedReader(InputStreamReader(clientSocket.getInputStream()))
@@ -65,8 +65,11 @@ class ClientServerViewModel : ViewModel() {
                     val read = inputFromClient.readLine()
                     if (serverAddress == null) {
                         serverAddress = clientSocket.inetAddress.hostName
+                        Timber.d("to sie wywoluje 321")
                         //todo tu trzeba odpalic kolejny watek jako klient
                         // i zmienic fragment na chatFragment
+                        foo()
+                        connectToServer(serverAddress!!)
                     }
                     Timber.d("przeczytalem cos takiego ${read}")
 

@@ -12,7 +12,7 @@ class ServerThread: Runnable {
     override fun run() {
         var socket: Socket?
         try {
-            serverSocket = ServerSocket(8888)
+            serverSocket = ServerSocket(SERVER_PORT)
         } catch (e: IOException) {
             e.printStackTrace()
         }

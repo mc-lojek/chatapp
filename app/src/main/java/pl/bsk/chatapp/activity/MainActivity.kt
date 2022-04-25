@@ -26,6 +26,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         askForPermissions()
+
+        viewModel.listenServerConnection()
     }
 
     override fun onRequestPermissionsResult(
@@ -45,6 +47,7 @@ class MainActivity : AppCompatActivity() {
         if (EasyPermissions.hasPermissions(this, *perms)) {
             // Already have permission, do the thing
             Log.i("MainActivity", "Permissions are granted")
+
         } else {
             // Do not have permissions, request them now
             Log.i("MainActivity", "Permissions are not granted")

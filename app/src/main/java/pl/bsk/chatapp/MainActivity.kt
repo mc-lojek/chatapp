@@ -1,9 +1,12 @@
 package pl.bsk.chatapp
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
+import android.net.wifi.p2p.WifiP2pConfig
+import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pDeviceList
 import android.net.wifi.p2p.WifiP2pManager
 import androidx.appcompat.app.AppCompatActivity
@@ -16,7 +19,7 @@ import timber.log.Timber
 
 const val RC_LOCATION = 2137
 
-class MainActivity : AppCompatActivity(),WifiP2pManager.PeerListListener {
+class MainActivity : AppCompatActivity(), WifiP2pManager.PeerListListener {
     val manager: WifiP2pManager? by lazy(LazyThreadSafetyMode.NONE) {
         getSystemService(Context.WIFI_P2P_SERVICE) as WifiP2pManager?
     }
@@ -28,6 +31,7 @@ class MainActivity : AppCompatActivity(),WifiP2pManager.PeerListListener {
         addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
         addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
     }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -40,13 +44,19 @@ class MainActivity : AppCompatActivity(),WifiP2pManager.PeerListListener {
 
     }
 
-    fun setupOnClicks(){
-        findViewById<Button>(R.id.button).setOnClickListener{
+    @SuppressLint("MissingPermission")
+    fun setupOnClicks() {
+        findViewById<Button>(R.id.button).setOnClickListener {
             Timber.d("onClick")
             manager?.discoverPeers(channel, object : WifiP2pManager.ActionListener {
 
                 override fun onSuccess() {
-                    Timber.d("success")
+                    manager?.requestPeers(channel) {
+                        Timber.d("siemano" + it)
+                        if (it.deviceList.isNotEmpty()) {
+                            connectToPeer(it.deviceList.random())
+                        }
+                    }
                 }
 
                 override fun onFailure(reasonCode: Int) {
@@ -56,6 +66,26 @@ class MainActivity : AppCompatActivity(),WifiP2pManager.PeerListListener {
         }
     }
 
+    @SuppressLint("MissingPermission")
+    fun connectToPeer(device: WifiP2pDevice) {
+        val config = WifiP2pConfig()
+        config.deviceAddress = device.deviceAddress
+        channel?.also { channel ->
+            manager?.connect(channel, config, object : WifiP2pManager.ActionListener {
+
+                override fun onSuccess() {
+                    //success logic
+                    Timber.d("polaczono")
+                }
+
+                override fun onFailure(reason: Int) {
+                    //failure logic
+                    Timber.d("Nie polaczono")
+                }
+            }
+            )
+        }
+    }
 
 
     override fun onRequestPermissionsResult(
@@ -79,7 +109,7 @@ class MainActivity : AppCompatActivity(),WifiP2pManager.PeerListListener {
             // Do not have permissions, request them now
             Log.i("MainActivity", "Permissions are not granted")
             EasyPermissions.requestPermissions(
-                this,"Permissions not granted",
+                this, "Permissions not granted",
                 RC_LOCATION, *perms
             )
         }
@@ -102,6 +132,6 @@ class MainActivity : AppCompatActivity(),WifiP2pManager.PeerListListener {
     }
 
     override fun onPeersAvailable(list: WifiP2pDeviceList?) {
-        Timber.d(list.toString())
+        Timber.d("gowno" + list.toString())
     }
 }

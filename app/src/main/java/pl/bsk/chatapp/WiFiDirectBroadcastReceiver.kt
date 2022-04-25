@@ -38,15 +38,15 @@ class WiFiDirectBroadcastReceiver(
             WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> {
                 // Call WifiP2pManager.requestPeers() to get a list of current peers
                 Timber.d("2")
-                if (ActivityCompat.checkSelfPermission(
-                        activity,
-                        Manifest.permission.ACCESS_FINE_LOCATION
-                    ) != PackageManager.PERMISSION_GRANTED) {return}
-                manager.requestPeers(channel) { peers: WifiP2pDeviceList? ->
-                    // Handle peers list
-                    Timber.d("21")
-                    Timber.d("lista"+peers.toString())
-                }
+//                if (ActivityCompat.checkSelfPermission(
+//                        activity,
+//                        Manifest.permission.ACCESS_FINE_LOCATION
+//                    ) != PackageManager.PERMISSION_GRANTED) {return}
+//                manager.requestPeers(channel) { peers: WifiP2pDeviceList? ->
+//                    // Handle peers list
+//                    Timber.d("21")
+//                    Timber.d("lista"+peers.toString())
+//                }
             }
             WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
                 // Respond to new connection or disconnections

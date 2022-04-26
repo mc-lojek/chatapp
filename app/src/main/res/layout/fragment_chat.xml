@@ -7,22 +7,34 @@
     tools:context=".fragment.ChatFragment">
 
     <EditText
-        app:layout_constraintTop_toTopOf="parent"
         android:id="@+id/message_et"
         android:layout_width="0dp"
-        android:layout_margin="10dp"
-        app:layout_constraintStart_toStartOf="parent"
         android:layout_height="wrap_content"
-        app:layout_constraintEnd_toStartOf="@id/send_btn"/>
+        android:layout_margin="10dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/send_btn"
+        app:layout_constraintStart_toStartOf="parent" />
 
     <Button
         android:id="@+id/send_btn"
-        android:layout_margin="10dp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_margin="10dp"
         android:text="SEND"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/messages_rcl"
+        android:layout_width="0dp"
+        tools:listitem="@layout/view_message_item"
+        tools:itemCount="10"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@+id/message_et"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        app:layout_constraintVertical_bias="1.0" />
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>

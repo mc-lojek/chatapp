@@ -1,24 +1,15 @@
 package pl.bsk.chatapp.activity
 
 import android.Manifest
-import android.annotation.SuppressLint
-import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import pub.devrel.easypermissions.EasyPermissions
 import android.util.Log
-import android.widget.Button
 import androidx.activity.viewModels
-import androidx.fragment.app.activityViewModels
-import androidx.navigation.findNavController
 import androidx.navigation.fragment.findNavController
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import pl.bsk.chatapp.R
-import pl.bsk.chatapp.activity.ClientActivity
 import pl.bsk.chatapp.viewmodel.ClientServerViewModel
 import pub.devrel.easypermissions.AfterPermissionGranted
-import timber.log.Timber
 
 const val RC_LOCATION = 2137
 

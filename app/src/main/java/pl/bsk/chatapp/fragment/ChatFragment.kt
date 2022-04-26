@@ -8,18 +8,36 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import pl.bsk.chatapp.R
 import pl.bsk.chatapp.adapter.MessageRecyclerAdapter
 import pl.bsk.chatapp.model.Message
 import pl.bsk.chatapp.viewmodel.ClientServerViewModel
+import timber.log.Timber
 import java.time.LocalTime
 
 class ChatFragment : Fragment() {
     private lateinit var adapter: MessageRecyclerAdapter
     private lateinit var linearLayoutManager: LinearLayoutManager
     private val viewModel by activityViewModels<ClientServerViewModel>()
+
+    private lateinit var recycler: RecyclerView
+
+    private val observer = Observer<Message?> { newMessage ->
+
+
+
+        if (newMessage != null) {
+            adapter.addMessage(newMessage)
+            recycler.smoothScrollToPosition(adapter.getListSize() - 1)
+            Timber.d("wiadomosc obserwuje ${newMessage}")
+        } else {
+            Timber.d("null tu jest w obserwerze")
+        }
+
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -31,27 +49,27 @@ class ChatFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        setupOnClicks()
         setupAdapter()
+        setupOnClicks()
+
+        viewModel.newMessageLiveData.observe(viewLifecycleOwner, observer)
     }
 
     private fun setupAdapter() {
-        linearLayoutManager = LinearLayoutManager(this.activity)
-        val recycler = requireActivity().findViewById<RecyclerView>(R.id.messages_rcl)
-        recycler.layoutManager = linearLayoutManager
+        recycler = requireActivity().findViewById(R.id.messages_rcl)
 
+        linearLayoutManager = LinearLayoutManager(this.activity)
+        recycler.layoutManager = linearLayoutManager
         adapter = MessageRecyclerAdapter(mutableListOf())
         recycler.adapter = adapter
     }
 
     private fun setupOnClicks() {
+
         requireActivity().findViewById<Button>(R.id.send_btn).setOnClickListener {
             val messageEditText = requireActivity().findViewById<EditText>(R.id.message_et)
             val content = messageEditText.text.toString()
-            val recycler = requireActivity().findViewById<RecyclerView>(R.id.messages_rcl)
             val message = Message(LocalTime.now(), content, true)
-            adapter.addMessage(message)
-            recycler.smoothScrollToPosition(adapter.getListSize() - 1)
             messageEditText.text.clear()
             viewModel.sendMessageToServer(message)
         }

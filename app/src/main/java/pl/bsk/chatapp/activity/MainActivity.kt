@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import pub.devrel.easypermissions.EasyPermissions
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.navigation.fragment.findNavController
 import pl.bsk.chatapp.R
@@ -25,10 +26,16 @@ class MainActivity : AppCompatActivity() {
         viewModel.listenServerConnection {
             val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment)
             runOnUiThread {
-                navHostFragment?.findNavController()?.navigate(R.id.chatFragment)
+                if (it == "1") {
+                    navHostFragment?.findNavController()?.navigate(R.id.chatFragment)
+                } else {
+                    Toast.makeText(this, it, Toast.LENGTH_LONG)
+                        .show()
+                }
             }
         }
     }
+
 
     override fun onRequestPermissionsResult(
         requestCode: Int,

@@ -24,8 +24,7 @@ class MessageRecyclerAdapter(
 
     fun addMessage(message: Message){
         this.messageList.add(message)
-        notifyDataSetChanged()
-        //todo Dodać obsługiwanie dochodzenia nowej wiadomości
+        notifyItemInserted(messageList.size - 1)
     }
 
 

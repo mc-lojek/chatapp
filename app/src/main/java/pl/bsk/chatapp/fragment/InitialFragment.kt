@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Toast
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.findNavController
 import pl.bsk.chatapp.R
@@ -33,12 +34,20 @@ class InitialFragment : Fragment() {
 
     private fun setupOnClicks() {
         requireActivity().findViewById<Button>(R.id.connect_btn).setOnClickListener {
-            //todo poprawic to
             val ip = requireActivity().findViewById<EditText>(R.id.ip_addr_et).text.toString()
             viewModel.serverAddress = ip
-            viewModel.connectToServer(ip)
+            viewModel.connectToServer(ip) {
+                requireActivity().runOnUiThread {
+                    if (it == "1") {
+                        findNavController().navigate(R.id.action_initialFragment_to_chatFragment)
 
-            findNavController().navigate(R.id.action_initialFragment_to_chatFragment)
+                    } else {
+                        Toast.makeText(requireContext(), it, Toast.LENGTH_LONG)
+                            .show()
+                    }
+                }
+            }
+
         }
     }
 }

@@ -12,7 +12,6 @@ import java.io.*
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.time.LocalTime
 
 class ClientServerViewModel : ViewModel() {
 
@@ -20,12 +19,12 @@ class ClientServerViewModel : ViewModel() {
 
     lateinit var server2ClientSocket: ServerSocket
     lateinit var client2ServerSocket: Socket
+
     var isServerSocketRunning = false
     var isServerCommunicationSocketRunning = false
-    lateinit var inputFromClient: BufferedReader
-    private val bos = ByteArrayOutputStream()
-    private val oos = ObjectOutputStream(bos)
 
+    lateinit var oos: ObjectOutputStream
+    lateinit var ois: ObjectInputStream
 
 
     fun listenServerConnection(foo: () -> Unit) = viewModelScope.launch {
@@ -34,6 +33,7 @@ class ClientServerViewModel : ViewModel() {
             try {
                 server2ClientSocket = ServerSocket(SERVER_PORT)
 
+                //todo mozliwe ze ta petla jest niepotrzebna
                 isServerSocketRunning = true
                 while (isServerSocketRunning) {
                     Timber.d("tu wszedlem server")
@@ -57,7 +57,7 @@ class ClientServerViewModel : ViewModel() {
     suspend fun communicateToClient(clientSocket: Socket, foo: () -> Unit) {
         withContext(Dispatchers.IO) {
             try {
-                inputFromClient = BufferedReader(InputStreamReader(clientSocket.getInputStream()))
+                ois = ObjectInputStream(clientSocket.getInputStream())
             } catch (e: IOException) {
                 e.printStackTrace()
             }
@@ -65,7 +65,9 @@ class ClientServerViewModel : ViewModel() {
             while (isServerCommunicationSocketRunning) {
                 try {
                     Timber.d("komunikacja 3")
-                    val read = inputFromClient.readLine()
+
+                    val msg = ois.readObject() as Message //todo tu trzeba sprawdzac cast
+
                     if (serverAddress == null) {
                         serverAddress = clientSocket.inetAddress.hostName
                         Timber.d("to sie wywoluje 321")
@@ -73,10 +75,12 @@ class ClientServerViewModel : ViewModel() {
                         foo()
                         connectToServer(serverAddress!!)
                     }
-                    Timber.d("przeczytalem cos takiego ${read}")
+
+                    Timber.d("przeczytalem cos takiego ${msg.content}")
 
                 } catch (e: IOException) {
                     e.printStackTrace()
+                    Thread.sleep(1000)
                 }
             }
         }
@@ -89,26 +93,20 @@ class ClientServerViewModel : ViewModel() {
                 Timber.d("klient 1")
                 client2ServerSocket = Socket(serverAddr, 8888)
                 //todo zabezpieczyc jak sie nie powiedzie
+                oos = ObjectOutputStream(client2ServerSocket.getOutputStream())
+                Timber.d("klient 2")
             } catch (e: IOException) {
                 e.printStackTrace()
             }
         }
     }
 
-    fun serializeMessege(msg:Message):Message{
-        oos.writeObject(msg)
-
-    }
-
-
-    fun sendMessageToServer(msg: String) = viewModelScope.launch {
+    fun sendMessageToServer(msg: Message) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
-            val output = PrintWriter(
-                BufferedWriter(OutputStreamWriter(client2ServerSocket.getOutputStream())),
-                true
-            )
 
-            output.println(msg)
+            oos.writeObject(msg)
+            oos.flush()
+
         }
     }
 }

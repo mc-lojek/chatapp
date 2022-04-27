@@ -9,8 +9,10 @@ import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.navigation.fragment.findNavController
 import pl.bsk.chatapp.R
+import pl.bsk.chatapp.readFile
 import pl.bsk.chatapp.viewmodel.ClientServerViewModel
 import pub.devrel.easypermissions.AfterPermissionGranted
+import timber.log.Timber
 
 const val RC_LOCATION = 2137
 
@@ -50,7 +52,7 @@ class MainActivity : AppCompatActivity() {
     @AfterPermissionGranted(RC_LOCATION)
     private fun askForPermissions() {
         val perms =
-            arrayOf<String>(Manifest.permission.ACCESS_FINE_LOCATION)
+            arrayOf<String>(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
         if (EasyPermissions.hasPermissions(this, *perms)) {
             // Already have permission, do the thing
             Log.i("MainActivity", "Permissions are granted")

@@ -13,9 +13,11 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import pl.bsk.chatapp.R
 import pl.bsk.chatapp.adapter.MessageRecyclerAdapter
+import pl.bsk.chatapp.model.FileMeta
 import pl.bsk.chatapp.model.Message
 import pl.bsk.chatapp.viewmodel.ClientServerViewModel
 import timber.log.Timber
+import java.io.File
 import java.time.LocalTime
 
 class ChatFragment : Fragment() {
@@ -72,6 +74,13 @@ class ChatFragment : Fragment() {
             val message = Message(LocalTime.now(), content, true)
             messageEditText.text.clear()
             viewModel.sendMessageToServer(message)
+        }
+
+        requireActivity().findViewById<Button>(R.id.send_file_btn).setOnClickListener {
+
+            val file = File("/sdcard/Download/Untitled2.jpg")
+
+            viewModel.sendFile(file)
         }
     }
 

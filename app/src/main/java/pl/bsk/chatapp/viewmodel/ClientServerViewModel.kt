@@ -7,24 +7,31 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import pl.bsk.chatapp.SERVER_PORT
+import pl.bsk.chatapp.*
+import pl.bsk.chatapp.model.FileMeta
 import pl.bsk.chatapp.model.Message
 import timber.log.Timber
 import java.io.*
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import kotlin.math.min
 
 class ClientServerViewModel : ViewModel() {
 
-    private var serverAddress: String? = null
+    var serverAddress: String? = null
     private lateinit var server2ClientSocket: ServerSocket
     private lateinit var client2ServerSocket: Socket
 
     var isServerCommunicationSocketRunning = false
 
-    private lateinit var oos: ObjectOutputStream
-    private lateinit var ois: ObjectInputStream
+    private lateinit var oStream: OutputStream
+    private lateinit var iStream: InputStream
+
+    private val objectSizeBuffer = ByteArray(INT_SIZE)
+    private val objectBuffer = ByteArray(OBJECT_CHUNK_SIZE)
+    private val fileBuffer = ByteArray(FILE_CHUNK_SIZE)
+    private val fileOutputBuffer = ByteArray(FILE_CHUNK_SIZE)
 
     private val _newMessageLiveData: MutableLiveData<Message?> = MutableLiveData(null)
     val newMessageLiveData = _newMessageLiveData as LiveData<Message?>
@@ -50,18 +57,34 @@ class ClientServerViewModel : ViewModel() {
     suspend fun communicateToClient(clientSocket: Socket, action: (String) -> Unit) {
         withContext(Dispatchers.IO) {
             try {
-                ois = ObjectInputStream(clientSocket.getInputStream())
+                iStream = clientSocket.getInputStream()
             } catch (e: IOException) {
                 e.printStackTrace()
             }
             isServerCommunicationSocketRunning = true
             while (isServerCommunicationSocketRunning) {
                 try {
-                    when (val receivedObject = ois.readObject()) {
+                    iStream.read(objectSizeBuffer, 0, 81)
+                    val objectSize = objectSizeBuffer.deserialize() as Int
+                    Timber.d("po konwersji na inta ${objectSize}")
+
+                    //todo dając tutaj sleepa pozwalamy zeby ten co wysyla nadazal pisac zanim my to cale przeczytamy
+
+                    val foo = iStream.read(objectBuffer, 0, objectSize)
+
+                    Timber.d("foo: ${foo}")
+
+                    val obj = objectBuffer.deserialize()
+
+                    when (obj) {
                         is Message -> {
-                            receivedObject.isMine = false
-                            _newMessageLiveData.postValue(receivedObject)
-                            Timber.d("przeczytalem cos takiego ${receivedObject.content}")
+                            obj.isMine = false
+                            _newMessageLiveData.postValue(obj)
+                            Timber.d("przeczytalem cos takiego ${obj.content}")
+                        }
+                        is FileMeta -> {
+                            Timber.d("Dostałem meta pliku ${obj.filename} a jego rozmiar to ${obj.size}")
+                            readFileFromClient(obj)
                         }
                         else -> {
                             Timber.e("Jakis inny typ niz powinien byc ?!")
@@ -72,10 +95,42 @@ class ClientServerViewModel : ViewModel() {
                         connectToServer(serverAddress!!, action)
                     }
                 } catch (e: IOException) {
-                    e.printStackTrace()
+                    Timber.d("tutaj sie wywalam")
+                    //e.printStackTrace()
+                    isServerCommunicationSocketRunning = false
                 }
             }
         }
+    }
+
+    private fun readFileFromClient(fileMeta: FileMeta) {
+        Timber.d("zaczynam czytac plik")
+        val fileOut = File("/sdcard/Download/${fileMeta.filename}")
+        if (!fileOut.exists()) {
+            fileOut.createNewFile();
+        }
+        val fos = FileOutputStream(fileOut)
+
+        if (fileMeta.size <= FILE_CHUNK_SIZE) {
+            // plik jest maly i zmiesci sie na raz
+            Timber.d("czytam sobie")
+            iStream.read(fileBuffer, 0, fileMeta.size.toInt())
+            Timber.d("zapisuje do pliku")
+            fos.write(fileBuffer, 0, fileMeta.size.toInt())
+            Timber.d("skonczylem")
+        } else {
+            // duzy plik, trzeba chunkowac
+            var received = 0
+            var left = fileMeta.size.toInt()
+            while (received < fileMeta.size) {
+                Timber.d("rec: ${received} left: ${left}")
+                Timber.d("odczytałem tyle bajtów: "+iStream.read(fileBuffer, 0, min(FILE_CHUNK_SIZE, left)))
+                fos.write(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
+                received += FILE_CHUNK_SIZE
+                left -= FILE_CHUNK_SIZE
+            }
+        }
+        fos.close()
     }
 
     fun connectToServer(serverAddress: String, action: (String) -> Unit) = viewModelScope.launch {
@@ -83,7 +138,7 @@ class ClientServerViewModel : ViewModel() {
             try {
                 val serverAddr: InetAddress = InetAddress.getByName(serverAddress)
                 client2ServerSocket = Socket(serverAddr, 8888)
-                oos = ObjectOutputStream(client2ServerSocket.getOutputStream())
+                oStream = client2ServerSocket.getOutputStream()
                 action("1")
             } catch (e: IOException) {
                 e.printStackTrace()
@@ -94,9 +149,43 @@ class ClientServerViewModel : ViewModel() {
 
     fun sendMessageToServer(msg: Message) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
-            oos.writeObject(msg)
+
+            val array = msg.serialize()
+
+            oStream.write(array.size.serialize(), 0, 81)
+            oStream.write(array, 0, array.size)
+
             _newMessageLiveData.postValue(msg)
-            oos.flush()
+
+        }
+    }
+
+    fun sendFile(file: File) = viewModelScope.launch {
+        withContext(Dispatchers.IO) {
+
+            val meta = FileMeta(file.name, file.length())
+
+            val array = meta.serialize()
+
+            oStream.write(array.size.serialize(), 0, 81)
+            oStream.write(array, 0, array.size)
+            val bis = BufferedInputStream(FileInputStream(file))
+
+            if (meta.size <= FILE_CHUNK_SIZE) {
+                bis.read(fileOutputBuffer, 0, meta.size.toInt())
+                oStream.write(fileOutputBuffer, 0, meta.size.toInt())
+            } else {
+                var sent = 0
+                var left = meta.size.toInt()
+                //todo moznaby meta.size na inta zmienic z longa
+                while (sent < meta.size) {
+                    Timber.d("sent: ${sent} left: ${left}")
+                    bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
+                    oStream.write(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
+                    sent += FILE_CHUNK_SIZE
+                    left -= FILE_CHUNK_SIZE
+                }
+            }
         }
     }
 }

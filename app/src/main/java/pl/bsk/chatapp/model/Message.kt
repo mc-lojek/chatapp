@@ -9,4 +9,7 @@ class Message(
     var isMine: Boolean
 ):Serializable{
     fun sendTimeString():String = sendTime.toString().dropLast(4)
+    override fun toString(): String {
+        return "Message(sendTime=$sendTime, content='$content', isMine=$isMine)"
+    }
 }

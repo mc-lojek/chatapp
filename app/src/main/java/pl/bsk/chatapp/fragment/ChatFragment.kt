@@ -1,5 +1,7 @@
 package pl.bsk.chatapp.fragment
 
+import android.app.Activity.RESULT_OK
+import android.content.Intent
 import android.os.Bundle
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
@@ -11,6 +13,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import pl.bsk.chatapp.FILE_CHOOSE_REQUEST_CODE
 import pl.bsk.chatapp.R
 import pl.bsk.chatapp.adapter.MessageRecyclerAdapter
 import pl.bsk.chatapp.model.FileMeta
@@ -80,7 +83,32 @@ class ChatFragment : Fragment() {
 
             val file = File("/sdcard/Download/Untitled2.jpg")
 
-            viewModel.sendFile(file)
+            pickFileToSend()
+
+            //viewModel.sendFile(file)
+        }
+    }
+
+    private fun pickFileToSend() {
+        val intent = Intent()
+            .setType("*/*")
+            .setAction(Intent.ACTION_GET_CONTENT)
+
+        startActivityForResult(intent, FILE_CHOOSE_REQUEST_CODE)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if(requestCode == FILE_CHOOSE_REQUEST_CODE && resultCode == RESULT_OK) {
+            val selectedFile = data?.data
+
+            if(selectedFile != null) {
+                val file = File(selectedFile.path!!)
+                Timber.d("taki rozmiarek i nzawa pliku ${file.length()} ${file.name}")
+
+                viewModel.sendFile(file)
+            }
         }
     }
 

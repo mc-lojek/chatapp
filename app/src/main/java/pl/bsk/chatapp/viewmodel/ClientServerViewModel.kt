@@ -96,7 +96,7 @@ class ClientServerViewModel : ViewModel() {
                     }
                 } catch (e: IOException) {
                     Timber.d("tutaj sie wywalam")
-                    //e.printStackTrace()
+                    e.printStackTrace()
                     isServerCommunicationSocketRunning = false
                 }
             }
@@ -137,7 +137,7 @@ class ClientServerViewModel : ViewModel() {
         withContext(Dispatchers.IO) {
             try {
                 val serverAddr: InetAddress = InetAddress.getByName(serverAddress)
-                client2ServerSocket = Socket(serverAddr, 8888)
+                client2ServerSocket = Socket(serverAddr, SERVER_PORT)
                 oStream = client2ServerSocket.getOutputStream()
                 action("1")
             } catch (e: IOException) {

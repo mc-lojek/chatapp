@@ -55,11 +55,11 @@ class MainActivity : AppCompatActivity() {
             arrayOf<String>(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
         if (EasyPermissions.hasPermissions(this, *perms)) {
             // Already have permission, do the thing
-            Log.i("MainActivity", "Permissions are granted")
+            Timber.i("Permissions are granted")
 
         } else {
             // Do not have permissions, request them now
-            Log.i("MainActivity", "Permissions are not granted")
+            Timber.i("Permissions are not granted")
             EasyPermissions.requestPermissions(
                 this, "Permissions not granted",
                 RC_LOCATION, *perms

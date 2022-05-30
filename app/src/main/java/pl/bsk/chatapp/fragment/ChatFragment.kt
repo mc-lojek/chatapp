@@ -1,14 +1,18 @@
 package pl.bsk.chatapp.fragment
 
 import android.app.Activity.RESULT_OK
+import android.content.Context
 import android.content.Intent
+import android.database.Cursor
+import android.net.Uri
 import android.os.Bundle
-import androidx.fragment.app.Fragment
+import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -16,12 +20,12 @@ import androidx.recyclerview.widget.RecyclerView
 import pl.bsk.chatapp.FILE_CHOOSE_REQUEST_CODE
 import pl.bsk.chatapp.R
 import pl.bsk.chatapp.adapter.MessageRecyclerAdapter
-import pl.bsk.chatapp.model.FileMeta
 import pl.bsk.chatapp.model.Message
 import pl.bsk.chatapp.viewmodel.ClientServerViewModel
 import timber.log.Timber
 import java.io.File
 import java.time.LocalTime
+
 
 class ChatFragment : Fragment() {
     private lateinit var adapter: MessageRecyclerAdapter
@@ -103,13 +107,20 @@ class ChatFragment : Fragment() {
         if(requestCode == FILE_CHOOSE_REQUEST_CODE && resultCode == RESULT_OK) {
             val selectedFile = data?.data
 
-            if(selectedFile != null) {
-                val file = File(selectedFile.path!!)
-                Timber.d("taki rozmiarek i nzawa pliku ${file.length()} ${file.name}")
+            viewModel.sendFile(selectedFile!!, requireContext())
 
-                viewModel.sendFile(file)
-            }
+
+
+
+//
+//            if(selectedFile != null) {
+//                val file = File(selectedFile)
+//                Timber.d("taki rozmiarek i nzawa pliku ${file.length()} ${file.name}")
+//
+//                viewModel.sendFile(file)
+//            } else {
+//                Timber.d("dupa dupa dupa null")
+//            }
         }
     }
-
 }

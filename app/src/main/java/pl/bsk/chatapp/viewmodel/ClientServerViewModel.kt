@@ -1,10 +1,13 @@
 package pl.bsk.chatapp.viewmodel
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import pl.bsk.chatapp.*
@@ -12,10 +15,12 @@ import pl.bsk.chatapp.model.FileMeta
 import pl.bsk.chatapp.model.Message
 import timber.log.Timber
 import java.io.*
+import java.net.ContentHandler
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import kotlin.math.min
+import kotlin.system.measureTimeMillis
 
 class ClientServerViewModel : ViewModel() {
 
@@ -187,5 +192,57 @@ class ClientServerViewModel : ViewModel() {
                 }
             }
         }
+    }
+
+    fun sendFile(uri: Uri, context: Context) = viewModelScope.launch {
+        withContext(Dispatchers.IO) {
+
+            Timber.d("czy to jest nazwa? ${uri.lastPathSegment}")
+            var fileSize = 0L
+            val timeSpent = measureTimeMillis {
+                fileSize = getFileSizeFromUri(context, uri)
+            }
+
+            Timber.d("Tyle czasu to zajelo ${timeSpent}")
+
+            val meta = FileMeta("video.mp4", fileSize)
+
+            val array = meta.serialize()
+
+            oStream.write(array.size.serialize(), 0, 81)
+            oStream.write(array, 0, array.size)
+            val bis = BufferedInputStream(context.getContentResolver().openInputStream(uri))
+
+            if (meta.size <= FILE_CHUNK_SIZE) {
+                bis.read(fileOutputBuffer, 0, meta.size.toInt())
+                oStream.write(fileOutputBuffer, 0, meta.size.toInt())
+            } else {
+                var sent = 0
+                var left = meta.size.toInt()
+                //todo moznaby meta.size na inta zmienic z longa
+                while (sent < meta.size) {
+                    Timber.d("sent: ${sent} left: ${left}")
+                    bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
+                    oStream.write(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
+                    sent += FILE_CHUNK_SIZE
+                    left -= FILE_CHUNK_SIZE
+                }
+            }
+        }
+    }
+
+    @Throws(IOException::class)
+    private fun getFileSizeFromUri(context: Context, uri: Uri): Long {
+        var fileSize = 0L
+        val inputStream: InputStream? = context.getContentResolver().openInputStream(uri)
+        if (inputStream != null) {
+            val bytes = ByteArray(1024)
+            var read = -1
+            while (inputStream.read(bytes).also { read = it } >= 0) {
+                fileSize += read.toLong()
+            }
+        }
+        inputStream?.close()
+        return fileSize
     }
 }

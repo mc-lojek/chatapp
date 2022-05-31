@@ -1,13 +1,15 @@
 package pl.bsk.chatapp.viewmodel
 
+import android.content.ContentResolver
 import android.content.Context
+import android.database.Cursor
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import pl.bsk.chatapp.*
@@ -15,12 +17,12 @@ import pl.bsk.chatapp.model.FileMeta
 import pl.bsk.chatapp.model.Message
 import timber.log.Timber
 import java.io.*
-import java.net.ContentHandler
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import kotlin.math.min
 import kotlin.system.measureTimeMillis
+
 
 class ClientServerViewModel : ViewModel() {
 
@@ -69,7 +71,7 @@ class ClientServerViewModel : ViewModel() {
             isServerCommunicationSocketRunning = true
             while (isServerCommunicationSocketRunning) {
                 try {
-                    iStream.read(objectSizeBuffer, 0, 81)
+                    iStream.read(objectSizeBuffer, 0, INT_SIZE)
                     val objectSize = objectSizeBuffer.deserialize() as Int
                     Timber.d("po konwersji na inta ${objectSize}")
 
@@ -197,15 +199,9 @@ class ClientServerViewModel : ViewModel() {
     fun sendFile(uri: Uri, context: Context) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
 
-            Timber.d("czy to jest nazwa? ${uri.lastPathSegment}")
-            var fileSize = 0L
-            val timeSpent = measureTimeMillis {
-                fileSize = getFileSizeFromUri(context, uri)
-            }
+            val nameAndSize = queryNameAndSize(context.contentResolver, uri)
 
-            Timber.d("Tyle czasu to zajelo ${timeSpent}")
-
-            val meta = FileMeta("video.mp4", fileSize)
+            val meta = FileMeta(nameAndSize.first, nameAndSize.second)
 
             val array = meta.serialize()
 
@@ -228,21 +224,36 @@ class ClientServerViewModel : ViewModel() {
                     left -= FILE_CHUNK_SIZE
                 }
             }
+
+
+
+            Timber.d("moze to jest nazwa? ${nameAndSize.first} a to rozmiar ${nameAndSize.second}")
         }
     }
 
-    @Throws(IOException::class)
-    private fun getFileSizeFromUri(context: Context, uri: Uri): Long {
-        var fileSize = 0L
-        val inputStream: InputStream? = context.getContentResolver().openInputStream(uri)
-        if (inputStream != null) {
-            val bytes = ByteArray(1024)
-            var read = -1
-            while (inputStream.read(bytes).also { read = it } >= 0) {
-                fileSize += read.toLong()
-            }
-        }
-        inputStream?.close()
-        return fileSize
+    private fun queryNameAndSize(resolver: ContentResolver, uri: Uri): Pair<String, Long> {
+        val returnCursor: Cursor = resolver.query(uri, null, null, null, null)!!
+        val nameIndex: Int = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        val sizeIndex: Int = returnCursor.getColumnIndex(OpenableColumns.SIZE)
+        returnCursor.moveToFirst()
+        val name: String = returnCursor.getString(nameIndex)
+        val size: Long = returnCursor.getLong(sizeIndex)
+        returnCursor.close()
+        return Pair(name, size)
     }
+
+//    @Throws(IOException::class)
+//    private fun getFileSizeFromUri(context: Context, uri: Uri): Long {
+//        var fileSize = 0L
+//        val inputStream: InputStream? = context.getContentResolver().openInputStream(uri)
+//        if (inputStream != null) {
+//            val bytes = ByteArray(1024)
+//            var read = -1
+//            while (inputStream.read(bytes).also { read = it } >= 0) {
+//                fileSize += read.toLong()
+//            }
+//        }
+//        inputStream?.close()
+//        return fileSize
+//    }
 }

@@ -12,6 +12,9 @@ class ChatApp : Application() {
             ) {
                 super.log(priority, "BSK_$tag", message, t)
             }
+            override fun createStackElementTag(element: StackTraceElement): String? {
+                return "(${element.fileName}:${element.lineNumber})#${element.methodName}"
+            }
         })
     }
 }

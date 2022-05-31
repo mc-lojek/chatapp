@@ -12,7 +12,6 @@ import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.findNavController
 import pl.bsk.chatapp.R
 import pl.bsk.chatapp.doStuff
-import pl.bsk.chatapp.readFile
 import pl.bsk.chatapp.viewmodel.ClientServerViewModel
 import timber.log.Timber
 

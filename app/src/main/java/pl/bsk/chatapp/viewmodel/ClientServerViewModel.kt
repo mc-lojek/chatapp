@@ -91,7 +91,7 @@ class ClientServerViewModel : ViewModel() {
 
                     //deserializujemy go i sprawdzamy jakiego jest typu
                     val obj = try {
-                         objectBuffer.deserialize()
+                        objectBuffer.deserialize()
                     } catch (e: Exception) {
                         Timber.d("spadlem z rowerka przy deserializacji czegos")
                     }
@@ -131,24 +131,17 @@ class ClientServerViewModel : ViewModel() {
         }
         val fos = FileOutputStream(fileOut)
 
-        if (fileMeta.size <= FILE_CHUNK_SIZE) {
-            // plik jest maly i zmiesci sie na raz
-            Timber.d("czytam sobie")
-            iStream.read(fileBuffer, 0, fileMeta.size)
-            Timber.d("zapisuje do pliku")
-            fos.write(fileBuffer, 0, fileMeta.size)
-            Timber.d("skonczylem")
-        } else {
-            // duzy plik, trzeba chunkowac
-            var received = 0
-            var left = fileMeta.size
-            while (received < fileMeta.size) {
-                iStream.read(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
-                fos.write(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
-                received += FILE_CHUNK_SIZE
-                left -= FILE_CHUNK_SIZE
-                Timber.d("rec: ${received} left: ${left}")
-            }
+
+        // duzy plik, trzeba chunkowac
+        var received = 0
+        var left = fileMeta.size
+        var got = 0
+        while (received < fileMeta.size) {
+            got = iStream.read(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
+            fos.write(fileBuffer, 0, got)
+            received += got
+            left -= got
+            Timber.d("rec: ${received}, left: ${left}, got: ${got}")
         }
         fos.close()
     }
@@ -179,36 +172,37 @@ class ClientServerViewModel : ViewModel() {
 
         }
     }
-/*
-    fun sendFile(file: File) = viewModelScope.launch {
-        withContext(Dispatchers.IO) {
 
-            val meta = FileMeta(file.name, file.length())
+    /*
+        fun sendFile(file: File) = viewModelScope.launch {
+            withContext(Dispatchers.IO) {
 
-            val array = meta.serialize()
+                val meta = FileMeta(file.name, file.length())
 
-            oStream.write(array.size.serialize(), 0, 81)
-            oStream.write(array, 0, array.size)
-            val bis = BufferedInputStream(FileInputStream(file))
+                val array = meta.serialize()
 
-            if (meta.size <= FILE_CHUNK_SIZE) {
-                bis.read(fileOutputBuffer, 0, meta.size.toInt())
-                oStream.write(fileOutputBuffer, 0, meta.size.toInt())
-            } else {
-                var sent = 0
-                var left = meta.size.toInt()
-                //todo moznaby meta.size na inta zmienic z longa
-                while (sent < meta.size) {
-                    Timber.d("sent: ${sent} left: ${left}")
-                    bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
-                    oStream.write(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
-                    sent += FILE_CHUNK_SIZE
-                    left -= FILE_CHUNK_SIZE
+                oStream.write(array.size.serialize(), 0, 81)
+                oStream.write(array, 0, array.size)
+                val bis = BufferedInputStream(FileInputStream(file))
+
+                if (meta.size <= FILE_CHUNK_SIZE) {
+                    bis.read(fileOutputBuffer, 0, meta.size.toInt())
+                    oStream.write(fileOutputBuffer, 0, meta.size.toInt())
+                } else {
+                    var sent = 0
+                    var left = meta.size.toInt()
+                    //todo moznaby meta.size na inta zmienic z longa
+                    while (sent < meta.size) {
+                        Timber.d("sent: ${sent} left: ${left}")
+                        bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
+                        oStream.write(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
+                        sent += FILE_CHUNK_SIZE
+                        left -= FILE_CHUNK_SIZE
+                    }
                 }
             }
         }
-    }
-*/
+    */
     fun sendFile(uri: Uri, context: Context) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
 
@@ -222,20 +216,17 @@ class ClientServerViewModel : ViewModel() {
             oStream.write(array, 0, array.size)
             val bis = BufferedInputStream(context.contentResolver.openInputStream(uri))
 
-            if (meta.size <= FILE_CHUNK_SIZE) {
-                bis.read(fileOutputBuffer, 0, meta.size)
-                oStream.write(fileOutputBuffer, 0, meta.size)
-            } else {
+            var got=0
                 var sent = 0
                 var left = meta.size
                 while (sent < meta.size) {
-                    bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
-                    oStream.write(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
-                    sent += FILE_CHUNK_SIZE
-                    left -= FILE_CHUNK_SIZE
-                    Timber.d("sent: ${sent} left: ${left}")
+                    got=bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
+                    oStream.write(fileOutputBuffer, 0, got)
+                    sent += got
+                    left -= got
+                    Timber.d("sent: ${sent}, left: ${left}, got: $got")
                 }
-            }
+
         }
     }
 

@@ -17,6 +17,7 @@ import pl.bsk.chatapp.model.FileMeta
 import pl.bsk.chatapp.model.Message
 import timber.log.Timber
 import java.io.*
+import java.lang.Exception
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -71,23 +72,35 @@ class ClientServerViewModel : ViewModel() {
             isServerCommunicationSocketRunning = true
             while (isServerCommunicationSocketRunning) {
                 try {
+                    //najpierw czytamy jednego inta który mowi nam jaki rozmiar ma obiekt ktory przyjdzie jako kolejny
+
                     iStream.read(objectSizeBuffer, 0, INT_SIZE)
-                    val objectSize = objectSizeBuffer.deserialize() as Int
+                    //val objectSize = objectSizeBuffer.deserialize() as Int
+
+                    val objectSize = try {
+                        objectSizeBuffer.deserialize()
+                    } catch (e: Exception) {
+                        Timber.d("spadlem z rowerka przy deserializacji czegos")
+                        continue
+                    } as Int
+
                     Timber.d("po konwersji na inta ${objectSize}")
 
-                    //todo dając tutaj sleepa pozwalamy zeby ten co wysyla nadazal pisac zanim my to cale przeczytamy
+                    //nastepnie czytamy ten obiekt w calosci z socketa
+                    iStream.read(objectBuffer, 0, objectSize)
 
-                    val foo = iStream.read(objectBuffer, 0, objectSize)
-
-                    Timber.d("foo: ${foo}")
-
-                    val obj = objectBuffer.deserialize()
+                    //deserializujemy go i sprawdzamy jakiego jest typu
+                    val obj = try {
+                         objectBuffer.deserialize()
+                    } catch (e: Exception) {
+                        Timber.d("spadlem z rowerka przy deserializacji czegos")
+                    }
 
                     when (obj) {
                         is Message -> {
                             obj.isMine = false
                             _newMessageLiveData.postValue(obj)
-                            Timber.d("przeczytalem cos takiego ${obj.content}")
+                            Timber.d("przeczytalem taka wiadomosc ${obj.content}")
                         }
                         is FileMeta -> {
                             Timber.d("Dostałem meta pliku ${obj.filename} a jego rozmiar to ${obj.size}")
@@ -104,7 +117,7 @@ class ClientServerViewModel : ViewModel() {
                 } catch (e: IOException) {
                     Timber.d("tutaj sie wywalam")
                     e.printStackTrace()
-                    isServerCommunicationSocketRunning = false
+                    //isServerCommunicationSocketRunning = false
                 }
             }
         }
@@ -121,20 +134,20 @@ class ClientServerViewModel : ViewModel() {
         if (fileMeta.size <= FILE_CHUNK_SIZE) {
             // plik jest maly i zmiesci sie na raz
             Timber.d("czytam sobie")
-            iStream.read(fileBuffer, 0, fileMeta.size.toInt())
+            iStream.read(fileBuffer, 0, fileMeta.size)
             Timber.d("zapisuje do pliku")
-            fos.write(fileBuffer, 0, fileMeta.size.toInt())
+            fos.write(fileBuffer, 0, fileMeta.size)
             Timber.d("skonczylem")
         } else {
             // duzy plik, trzeba chunkowac
             var received = 0
-            var left = fileMeta.size.toInt()
+            var left = fileMeta.size
             while (received < fileMeta.size) {
-                Timber.d("rec: ${received} left: ${left}")
-                Timber.d("odczytałem tyle bajtów: "+iStream.read(fileBuffer, 0, min(FILE_CHUNK_SIZE, left)))
+                iStream.read(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
                 fos.write(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
                 received += FILE_CHUNK_SIZE
                 left -= FILE_CHUNK_SIZE
+                Timber.d("rec: ${received} left: ${left}")
             }
         }
         fos.close()
@@ -166,7 +179,7 @@ class ClientServerViewModel : ViewModel() {
 
         }
     }
-
+/*
     fun sendFile(file: File) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
 
@@ -195,42 +208,38 @@ class ClientServerViewModel : ViewModel() {
             }
         }
     }
-
+*/
     fun sendFile(uri: Uri, context: Context) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
 
             val nameAndSize = queryNameAndSize(context.contentResolver, uri)
 
-            val meta = FileMeta(nameAndSize.first, nameAndSize.second)
+            val meta = FileMeta(nameAndSize.first, nameAndSize.second.toInt())
 
             val array = meta.serialize()
 
             oStream.write(array.size.serialize(), 0, 81)
             oStream.write(array, 0, array.size)
-            val bis = BufferedInputStream(context.getContentResolver().openInputStream(uri))
+            val bis = BufferedInputStream(context.contentResolver.openInputStream(uri))
 
             if (meta.size <= FILE_CHUNK_SIZE) {
-                bis.read(fileOutputBuffer, 0, meta.size.toInt())
-                oStream.write(fileOutputBuffer, 0, meta.size.toInt())
+                bis.read(fileOutputBuffer, 0, meta.size)
+                oStream.write(fileOutputBuffer, 0, meta.size)
             } else {
                 var sent = 0
-                var left = meta.size.toInt()
-                //todo moznaby meta.size na inta zmienic z longa
+                var left = meta.size
                 while (sent < meta.size) {
-                    Timber.d("sent: ${sent} left: ${left}")
                     bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
                     oStream.write(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
                     sent += FILE_CHUNK_SIZE
                     left -= FILE_CHUNK_SIZE
+                    Timber.d("sent: ${sent} left: ${left}")
                 }
             }
-
-
-
-            Timber.d("moze to jest nazwa? ${nameAndSize.first} a to rozmiar ${nameAndSize.second}")
         }
     }
 
+    // gets filename and its size based on the uri and returns it as a pair
     private fun queryNameAndSize(resolver: ContentResolver, uri: Uri): Pair<String, Long> {
         val returnCursor: Cursor = resolver.query(uri, null, null, null, null)!!
         val nameIndex: Int = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -241,19 +250,4 @@ class ClientServerViewModel : ViewModel() {
         returnCursor.close()
         return Pair(name, size)
     }
-
-//    @Throws(IOException::class)
-//    private fun getFileSizeFromUri(context: Context, uri: Uri): Long {
-//        var fileSize = 0L
-//        val inputStream: InputStream? = context.getContentResolver().openInputStream(uri)
-//        if (inputStream != null) {
-//            val bytes = ByteArray(1024)
-//            var read = -1
-//            while (inputStream.read(bytes).also { read = it } >= 0) {
-//                fileSize += read.toLong()
-//            }
-//        }
-//        inputStream?.close()
-//        return fileSize
-//    }
 }

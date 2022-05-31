@@ -7,27 +7,6 @@ import timber.log.Timber
 import java.io.*
 
 
-fun Serializable.serialize(): ByteArray {
-        val byteArrayOutputStream = ByteArrayOutputStream()
-        val objectOutputStream: ObjectOutputStream
-        objectOutputStream = ObjectOutputStream(byteArrayOutputStream)
-        objectOutputStream.writeObject(this)
-        objectOutputStream.flush()
-        val result = byteArrayOutputStream.toByteArray()
-        byteArrayOutputStream.close()
-        objectOutputStream.close()
-        return result
-    }
-
-    fun ByteArray.deserialize(): Serializable {
-        val byteArrayInputStream = ByteArrayInputStream(this)
-        val objectInput: ObjectInput
-        objectInput = ObjectInputStream(byteArrayInputStream)
-        val result = objectInput.readObject() as Serializable
-        objectInput.close()
-        byteArrayInputStream.close()
-        return result
-    }
 
     fun doStuff() {
 //        val file = 2147483647//Message(LocalTime.now(),"cokolwgfjdfgjgfjgjhgjgjjgjggjgjjiek.pdf.jpgś", false)

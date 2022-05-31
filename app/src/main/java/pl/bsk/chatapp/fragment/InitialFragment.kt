@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.findNavController
 import pl.bsk.chatapp.R
+import pl.bsk.chatapp.SERVER_IP
 import pl.bsk.chatapp.doStuff
 import pl.bsk.chatapp.viewmodel.ClientServerViewModel
 import timber.log.Timber
@@ -38,9 +39,10 @@ class InitialFragment : Fragment() {
 
     private fun setupOnClicks() {
         requireActivity().findViewById<Button>(R.id.connect_btn).setOnClickListener {
-            val ip = requireActivity().findViewById<EditText>(R.id.ip_addr_et).text.toString()
+            val portNumberToConnect = requireActivity().findViewById<EditText>(R.id.ip_addr_et).text.toString().toInt()
+            val ip = SERVER_IP
             viewModel.serverAddress = ip
-            viewModel.connectToServer(ip) {
+            viewModel.connectToServer(ip,portNumberToConnect) {
                 requireActivity().runOnUiThread {
                     if (it == "1") {
                         findNavController().navigate(R.id.action_initialFragment_to_chatFragment)
@@ -52,6 +54,21 @@ class InitialFragment : Fragment() {
                 }
             }
 
+        }
+        requireActivity().findViewById<Button>(R.id.listen_btn).setOnClickListener {
+            val minePortNumber = if(requireActivity().findViewById<EditText>(R.id.ip_addr_et).text.toString().toInt()==8888)8889 else 8888
+            viewModel.serverPortNumber=minePortNumber
+
+            viewModel.listenServerConnection {
+                requireActivity().runOnUiThread {
+                    if (it == "1") {
+                        findNavController().navigate(R.id.chatFragment)
+                    } else {
+                        Toast.makeText(requireContext(), it, Toast.LENGTH_LONG)
+                            .show()
+                    }
+                }
+            }
         }
     }
 }

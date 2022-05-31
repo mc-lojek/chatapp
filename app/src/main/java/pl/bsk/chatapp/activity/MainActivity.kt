@@ -25,17 +25,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         askForPermissions()
 
-        viewModel.listenServerConnection {
-            val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment)
-            runOnUiThread {
-                if (it == "1") {
-                    navHostFragment?.findNavController()?.navigate(R.id.chatFragment)
-                } else {
-                    Toast.makeText(this, it, Toast.LENGTH_LONG)
-                        .show()
-                }
-            }
-        }
+
     }
 
 

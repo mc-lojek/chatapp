@@ -28,6 +28,7 @@ import kotlin.system.measureTimeMillis
 class ClientServerViewModel : ViewModel() {
 
     var serverAddress: String? = null
+    var serverPortNumber: Int? = null
     private lateinit var server2ClientSocket: ServerSocket
     private lateinit var client2ServerSocket: Socket
 
@@ -48,7 +49,10 @@ class ClientServerViewModel : ViewModel() {
         withContext(Dispatchers.IO) {
             var socket: Socket?
             try {
-                server2ClientSocket = ServerSocket(SERVER_PORT)
+                server2ClientSocket = ServerSocket(serverPortNumber!!)
+                Timber.d("Nasluchuje na porcie: $serverPortNumber")
+
+
                 try {
                     socket = server2ClientSocket.accept()
                     viewModelScope.launch { communicateToClient(socket, action) }
@@ -61,6 +65,22 @@ class ClientServerViewModel : ViewModel() {
             }
         }
     }
+
+
+    fun connectToServer(serverAddress: String, serverPort: Int, action: (String) -> Unit) =
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    val serverAddr: InetAddress = InetAddress.getByName(serverAddress)
+                    client2ServerSocket = Socket(serverAddr, serverPort)
+                    oStream = client2ServerSocket.getOutputStream()
+                    action("1")
+                } catch (e: IOException) {
+                    e.printStackTrace()
+                    action(e.message ?: "Undefined error")
+                }
+            }
+        }
 
     suspend fun communicateToClient(clientSocket: Socket, action: (String) -> Unit) {
         withContext(Dispatchers.IO) {
@@ -91,7 +111,7 @@ class ClientServerViewModel : ViewModel() {
 
                     //deserializujemy go i sprawdzamy jakiego jest typu
                     val obj = try {
-                         objectBuffer.deserialize()
+                        objectBuffer.deserialize()
                     } catch (e: Exception) {
                         Timber.d("spadlem z rowerka przy deserializacji czegos")
                     }
@@ -110,9 +130,20 @@ class ClientServerViewModel : ViewModel() {
                             Timber.e("Jakis inny typ niz powinien byc ?!")
                         }
                     }
+                    Timber.d("pierwszy srodkowy")
                     if (serverAddress == null) {
-                        serverAddress = clientSocket.inetAddress.hostName
-                        connectToServer(serverAddress!!, action)
+                        serverAddress = SERVER_IP
+                        Timber.d("przed srodkowy")
+                        if (serverPortNumber == 8888) {
+                            connectToServer(serverAddress!!, 8889, action)
+
+                        } else if (serverPortNumber == 8889) {
+                            connectToServer(serverAddress!!, 8888, action)
+
+                        } else {
+                            Timber.e("Port jest nieporawny - pewnie null")
+                        }
+
                     }
                 } catch (e: IOException) {
                     Timber.d("tutaj sie wywalam")
@@ -125,47 +156,31 @@ class ClientServerViewModel : ViewModel() {
 
     private fun readFileFromClient(fileMeta: FileMeta) {
         Timber.d("zaczynam czytac plik")
-        val fileOut = File("/sdcard/Download/${fileMeta.filename}")
+        val fileOut = File("/data/data/pl.bsk.chatapp/${fileMeta.filename}")
         if (!fileOut.exists()) {
             fileOut.createNewFile();
         }
         val fos = FileOutputStream(fileOut)
 
-        if (fileMeta.size <= FILE_CHUNK_SIZE) {
-            // plik jest maly i zmiesci sie na raz
-            Timber.d("czytam sobie")
-            iStream.read(fileBuffer, 0, fileMeta.size)
-            Timber.d("zapisuje do pliku")
-            fos.write(fileBuffer, 0, fileMeta.size)
-            Timber.d("skonczylem")
-        } else {
-            // duzy plik, trzeba chunkowac
-            var received = 0
-            var left = fileMeta.size
-            while (received < fileMeta.size) {
-                iStream.read(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
-                fos.write(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
-                received += FILE_CHUNK_SIZE
-                left -= FILE_CHUNK_SIZE
-                Timber.d("rec: ${received} left: ${left}")
-            }
+
+        // duzy plik, trzeba chunkowac
+        var received = 0
+        var left = fileMeta.size
+        var got = 0
+        while (received < fileMeta.size) {
+            got = iStream.read(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
+            fos.write(fileBuffer, 0, got)
+            received += got
+            left -= got
+            Timber.d("rec: ${received} left: ${left} got: ${got}")
+
         }
+        Timber.d("pozostalych: ${iStream.available()}")
+
+
         fos.close()
     }
 
-    fun connectToServer(serverAddress: String, action: (String) -> Unit) = viewModelScope.launch {
-        withContext(Dispatchers.IO) {
-            try {
-                val serverAddr: InetAddress = InetAddress.getByName(serverAddress)
-                client2ServerSocket = Socket(serverAddr, SERVER_PORT)
-                oStream = client2ServerSocket.getOutputStream()
-                action("1")
-            } catch (e: IOException) {
-                e.printStackTrace()
-                action(e.message ?: "Undefined error")
-            }
-        }
-    }
 
     fun sendMessageToServer(msg: Message) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
@@ -179,36 +194,37 @@ class ClientServerViewModel : ViewModel() {
 
         }
     }
-/*
-    fun sendFile(file: File) = viewModelScope.launch {
-        withContext(Dispatchers.IO) {
 
-            val meta = FileMeta(file.name, file.length())
+    /*
+        fun sendFile(file: File) = viewModelScope.launch {
+            withContext(Dispatchers.IO) {
 
-            val array = meta.serialize()
+                val meta = FileMeta(file.name, file.length())
 
-            oStream.write(array.size.serialize(), 0, 81)
-            oStream.write(array, 0, array.size)
-            val bis = BufferedInputStream(FileInputStream(file))
+                val array = meta.serialize()
 
-            if (meta.size <= FILE_CHUNK_SIZE) {
-                bis.read(fileOutputBuffer, 0, meta.size.toInt())
-                oStream.write(fileOutputBuffer, 0, meta.size.toInt())
-            } else {
-                var sent = 0
-                var left = meta.size.toInt()
-                //todo moznaby meta.size na inta zmienic z longa
-                while (sent < meta.size) {
-                    Timber.d("sent: ${sent} left: ${left}")
-                    bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
-                    oStream.write(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
-                    sent += FILE_CHUNK_SIZE
-                    left -= FILE_CHUNK_SIZE
+                oStream.write(array.size.serialize(), 0, 81)
+                oStream.write(array, 0, array.size)
+                val bis = BufferedInputStream(FileInputStream(file))
+
+                if (meta.size <= FILE_CHUNK_SIZE) {
+                    bis.read(fileOutputBuffer, 0, meta.size.toInt())
+                    oStream.write(fileOutputBuffer, 0, meta.size.toInt())
+                } else {
+                    var sent = 0
+                    var left = meta.size.toInt()
+                    //todo moznaby meta.size na inta zmienic z longa
+                    while (sent < meta.size) {
+                        Timber.d("sent: ${sent} left: ${left}")
+                        bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
+                        oStream.write(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
+                        sent += FILE_CHUNK_SIZE
+                        left -= FILE_CHUNK_SIZE
+                    }
                 }
             }
         }
-    }
-*/
+    */
     fun sendFile(uri: Uri, context: Context) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
 

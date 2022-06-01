@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     tools:context=".fragment.ChatFragment">
 
     <EditText
@@ -36,14 +36,58 @@
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/messages_rcl"
         android:layout_width="0dp"
-        tools:listitem="@layout/view_message_item"
-        tools:itemCount="10"
         android:layout_height="0dp"
         app:layout_constraintBottom_toTopOf="@+id/message_et"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="1.0" />
+        app:layout_constraintVertical_bias="1.0"
+        tools:itemCount="10"
+        tools:listitem="@layout/view_message_item" />
+
+    <LinearLayout
+        android:clickable="true"
+        tools:visibility="visible"
+        android:visibility="gone"
+        android:id="@+id/pb_container_ll"
+        android:layout_width="match_parent"
+        android:background="#80000000"
+        android:gravity="center"
+        android:translationZ="20dp"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="20dp"
+            android:layout_margin="20dp"
+            android:alpha="30"
+            android:background="#f0000000"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ProgressBar
+                android:id="@+id/progress_bar"
+                style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="30dp"
+                android:layout_marginVertical="20dp"
+                tools:progress="40"
+                android:progress="0"
+                android:progressBackgroundTint="#ff0000"
+                android:progressTint="#ff0000"
+                android:scaleY="3" />
+
+            <TextView
+                android:id="@+id/pb_state_tv"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/white"
+                android:textSize="20sp"
+                tools:text="Trwa wysyłanie pliku (10%)" />
+
+        </LinearLayout>
+    </LinearLayout>
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>

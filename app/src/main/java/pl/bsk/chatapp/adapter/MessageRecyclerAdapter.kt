@@ -7,10 +7,12 @@ import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.RecyclerView
 import pl.bsk.chatapp.R
+import pl.bsk.chatapp.model.FileMessage
 import pl.bsk.chatapp.model.Message
 
 class MessageRecyclerAdapter(
-    private var messageList: MutableList<Message>
+    private var messageList: MutableList<Message>,
+    private val onMessageClick: (Message) -> Unit,
 ) : RecyclerView.Adapter<MessageRecyclerAdapter.ViewHolder>() {
 
     fun getListSize() = messageList.size
@@ -27,10 +29,9 @@ class MessageRecyclerAdapter(
         notifyItemInserted(messageList.size - 1)
     }
 
-
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val viewHolder = LayoutInflater.from(parent.context).inflate(R.layout.view_message_item, parent, false)
-        return ViewHolder(viewHolder)
+        return ViewHolder(viewHolder, onMessageClick)
     }
 
     override fun getItemCount(): Int {
@@ -42,9 +43,12 @@ class MessageRecyclerAdapter(
         holder.bind(message)
     }
 
-    class ViewHolder(val v: View) : RecyclerView.ViewHolder(v) {
+    class ViewHolder(val v: View, private val onMessageClick: (Message) -> Unit,) : RecyclerView.ViewHolder(v) {
 
         fun bind(message: Message) {
+            v.setOnClickListener{
+                onMessageClick(message)
+            }
             v.findViewById<TextView>(R.id.content_tv).text = message.content
             v.findViewById<TextView>(R.id.time_tv).text = message.sendTimeString()
             val container = v.findViewById<ConstraintLayout>(R.id.containter_cl)

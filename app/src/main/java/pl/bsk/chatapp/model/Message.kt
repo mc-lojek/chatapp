@@ -3,7 +3,7 @@ package pl.bsk.chatapp.model
 import java.io.Serializable
 import java.time.LocalTime
 
-class Message(
+open class Message(
     val sendTime: LocalTime,
     val content: String,
     var isMine: Boolean

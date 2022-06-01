@@ -1,17 +1,14 @@
 package pl.bsk.chatapp.fragment
 
 import android.app.Activity.RESULT_OK
-import android.content.Context
 import android.content.Intent
-import android.database.Cursor
-import android.net.Uri
+import android.content.pm.PackageManager
 import android.os.Bundle
-import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.EditText
+import android.webkit.MimeTypeMap
+import android.widget.*
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Observer
@@ -20,10 +17,11 @@ import androidx.recyclerview.widget.RecyclerView
 import pl.bsk.chatapp.FILE_CHOOSE_REQUEST_CODE
 import pl.bsk.chatapp.R
 import pl.bsk.chatapp.adapter.MessageRecyclerAdapter
+import pl.bsk.chatapp.model.FileMessage
+import pl.bsk.chatapp.model.FileSendProgress
 import pl.bsk.chatapp.model.Message
 import pl.bsk.chatapp.viewmodel.ClientServerViewModel
 import timber.log.Timber
-import java.io.File
 import java.time.LocalTime
 
 
@@ -33,19 +31,42 @@ class ChatFragment : Fragment() {
     private val viewModel by activityViewModels<ClientServerViewModel>()
 
     private lateinit var recycler: RecyclerView
+    private lateinit var progressContainer: LinearLayout
+    private lateinit var progressBar: ProgressBar
+    private lateinit var progressStateText: TextView
 
     private val observer = Observer<Message?> { newMessage ->
-
-
-
         if (newMessage != null) {
+
+            if (newMessage is FileMessage) {
+                Timber.d("odebralem pliczek ${newMessage.uri.path}")
+                Timber.d(getMimeType(newMessage.uri.path))
+            }
+
             adapter.addMessage(newMessage)
             recycler.smoothScrollToPosition(adapter.getListSize() - 1)
             Timber.d("wiadomosc obserwuje ${newMessage}")
         } else {
             Timber.d("null tu jest w obserwerze")
         }
+    }
 
+    private val fileObserver = Observer<FileSendProgress?> { progress ->
+        if (progress != null) {
+
+            progressBar.progress = progress.progress
+            if (progress.errorMessage == null) {
+                progressStateText.text = "${progress.progress}%"
+            } else {
+                progressStateText.text = progress.errorMessage
+            }
+            progressContainer.visibility = View.VISIBLE
+
+        } else {
+            progressBar.progress = 0
+            progressStateText.text = ""
+            progressContainer.visibility = View.GONE
+        }
     }
 
     override fun onCreateView(
@@ -60,8 +81,10 @@ class ChatFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         setupAdapter()
         setupOnClicks()
+        setupViews()
 
         viewModel.newMessageLiveData.observe(viewLifecycleOwner, observer)
+        viewModel.fileSendingStatusLiveData.observe(viewLifecycleOwner, fileObserver)
     }
 
     private fun setupAdapter() {
@@ -69,7 +92,17 @@ class ChatFragment : Fragment() {
 
         linearLayoutManager = LinearLayoutManager(this.activity)
         recycler.layoutManager = linearLayoutManager
-        adapter = MessageRecyclerAdapter(mutableListOf())
+        adapter = MessageRecyclerAdapter(mutableListOf()) {
+            if (it is FileMessage) {
+                val intent = Intent()
+                intent.action = Intent.ACTION_VIEW
+                intent.setDataAndType(it.uri, getMimeType(it.uri.path))
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+                if(checkAvailableApps(intent))
+                    startActivity(intent)
+            }
+        }
         recycler.adapter = adapter
     }
 
@@ -84,13 +117,14 @@ class ChatFragment : Fragment() {
         }
 
         requireActivity().findViewById<Button>(R.id.send_file_btn).setOnClickListener {
-
-            val file = File("/sdcard/Download/Untitled2.jpg")
-
             pickFileToSend()
-
-            //viewModel.sendFile(file)
         }
+    }
+
+    private fun setupViews() {
+        progressContainer = requireActivity().findViewById(R.id.pb_container_ll)
+        progressBar = requireActivity().findViewById(R.id.progress_bar)
+        progressStateText = requireActivity().findViewById(R.id.pb_state_tv)
     }
 
     private fun pickFileToSend() {
@@ -104,23 +138,36 @@ class ChatFragment : Fragment() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        if(requestCode == FILE_CHOOSE_REQUEST_CODE && resultCode == RESULT_OK) {
+        if (requestCode == FILE_CHOOSE_REQUEST_CODE && resultCode == RESULT_OK) {
             val selectedFile = data?.data
 
             viewModel.sendFile(selectedFile!!, requireContext())
-
-
-
-
-//
-//            if(selectedFile != null) {
-//                val file = File(selectedFile)
-//                Timber.d("taki rozmiarek i nzawa pliku ${file.length()} ${file.name}")
-//
-//                viewModel.sendFile(file)
-//            } else {
-//                Timber.d("dupa dupa dupa null")
-//            }
         }
+    }
+
+    private fun checkAvailableApps(intent: Intent): Boolean {
+        val manager: PackageManager = requireActivity().packageManager
+        val info = manager.queryIntentActivities(
+            intent,
+            PackageManager.MATCH_DEFAULT_ONLY
+        )
+        Timber.d("znaleziono tyle apek ${info.size}")
+        if (info.isEmpty()){
+            Toast.makeText(
+                requireContext(),
+                "No app found to open this file",
+                Toast.LENGTH_SHORT
+            ).show()
+            return false
+        } else return true
+    }
+
+    private fun getMimeType(uri: String?): String? {
+        var type: String? = null
+        val extension = MimeTypeMap.getFileExtensionFromUrl(uri)
+        if (extension != null) {
+            type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+        }
+        return type
     }
 }

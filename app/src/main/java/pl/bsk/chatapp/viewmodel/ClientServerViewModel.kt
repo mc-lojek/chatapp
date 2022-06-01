@@ -41,17 +41,26 @@ class ClientServerViewModel : ViewModel() {
     private lateinit var oStream: OutputStream
     private lateinit var iStream: InputStream
 
+    private lateinit var oResponseStream: OutputStream
+    private lateinit var iResponseStream: InputStream
+
     private val objectSizeBuffer = ByteArray(INT_SIZE)
     private val objectBuffer = ByteArray(OBJECT_CHUNK_SIZE)
     private val fileBuffer = ByteArray(FILE_CHUNK_SIZE)
     private val fileOutputBuffer = ByteArray(FILE_CHUNK_SIZE)
+    private val responseBuffer = ByteArray(INT_SIZE)
 
     private val _newMessageLiveData: MutableLiveData<Message?> = MutableLiveData(null)
     val newMessageLiveData = _newMessageLiveData as LiveData<Message?>
 
+    private val _confirmationResponseLiveData: MutableLiveData<Int?> = MutableLiveData(null)
+    val confirmationResponseLiveData = _confirmationResponseLiveData as LiveData<Int?>
+
     private val _fileSendingStatusLiveData: MutableLiveData<FileSendProgress?> =
         MutableLiveData(null)
     val fileSendingStatusLiveData = _fileSendingStatusLiveData as LiveData<FileSendProgress?>
+
+    val messagesList: MutableList<Message> = ArrayList()
 
     fun listenServerConnection(action: (String) -> Unit) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
@@ -71,10 +80,29 @@ class ClientServerViewModel : ViewModel() {
         }
     }
 
+    fun connectToServer(serverAddress: String, action: (String) -> Unit) = viewModelScope.launch {
+        withContext(Dispatchers.IO) {
+            Timber.d("connectuje sie")
+            try {
+                val serverAddr: InetAddress = InetAddress.getByName(serverAddress)
+                client2ServerSocket = Socket(serverAddr, SERVER_PORT)
+                oStream = client2ServerSocket.getOutputStream()
+                iResponseStream = client2ServerSocket.getInputStream()
+                Timber.d("listenuje")
+                listenResponse()
+                action("1")
+            } catch (e: IOException) {
+                e.printStackTrace()
+                action(e.message ?: "Undefined error")
+            }
+        }
+    }
+
     suspend fun communicateToClient(clientSocket: Socket, action: (String) -> Unit) {
         withContext(Dispatchers.IO) {
             try {
                 iStream = clientSocket.getInputStream()
+                oResponseStream = clientSocket.getOutputStream()
             } catch (e: IOException) {
                 e.printStackTrace()
             }
@@ -109,11 +137,13 @@ class ClientServerViewModel : ViewModel() {
                         is Message -> {
                             obj.isMine = false
                             _newMessageLiveData.postValue(obj)
+                            sendConfirmationResponse(obj.id)
                             Timber.d("przeczytalem taka wiadomosc ${obj.content}")
                         }
                         is FileMeta -> {
                             Timber.d("Dostałem meta pliku ${obj.filename} a jego rozmiar to ${obj.size}")
                             readFileFromClient(obj)
+                            sendConfirmationResponse(obj.id)
                         }
                         else -> {
                             Timber.e("Jakis inny typ niz powinien byc ?!")
@@ -123,12 +153,20 @@ class ClientServerViewModel : ViewModel() {
                         serverAddress = clientSocket.inetAddress.hostName
                         connectToServer(serverAddress!!, action)
                     }
+
                 } catch (e: IOException) {
                     Timber.d("tutaj sie wywalam")
                     e.printStackTrace()
                     //isServerCommunicationSocketRunning = false
                 }
             }
+        }
+    }
+
+    private suspend fun sendConfirmationResponse(messageId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            Timber.d("wysylam id wiadomosci ${messageId} ktora odebralem")
+            oResponseStream.write(messageId.serialize(), 0, INT_SIZE)
         }
     }
 
@@ -153,21 +191,34 @@ class ClientServerViewModel : ViewModel() {
             Timber.d("rec: ${received}, left: ${left}, got: ${got}")
         }
         val uri = Uri.parse(fileOut.path)
-        _newMessageLiveData.postValue(FileMessage(LocalTime.now(), fileMeta.filename, false, uri))
+        _newMessageLiveData.postValue(FileMessage(LocalTime.now(), fileMeta.filename, false, -1, false, uri))
 
         fos.close()
     }
 
-    fun connectToServer(serverAddress: String, action: (String) -> Unit) = viewModelScope.launch {
-        withContext(Dispatchers.IO) {
-            try {
-                val serverAddr: InetAddress = InetAddress.getByName(serverAddress)
-                client2ServerSocket = Socket(serverAddr, SERVER_PORT)
-                oStream = client2ServerSocket.getOutputStream()
-                action("1")
-            } catch (e: IOException) {
-                e.printStackTrace()
-                action(e.message ?: "Undefined error")
+    private suspend fun listenResponse() {
+        viewModelScope.launch(Dispatchers.IO) {
+            Timber.d("jestes tu?")
+            while (true) {
+                try {
+                    //najpierw czytamy jednego inta który mowi nam jaki rozmiar ma obiekt ktory przyjdzie jako kolejny
+                    Timber.d("czekam na potwierdzenie")
+                    iResponseStream.read(responseBuffer, 0, INT_SIZE)
+
+                    val deliveredMessageId = try {
+                        responseBuffer.deserialize()
+                    } catch (e: Exception) {
+                        Timber.d("spadlem z rowerka przy deserializacji czegos")
+                        continue
+                    } as Int
+
+                    Timber.d("dostalem potwierdzenie takiej wiadomosci ${deliveredMessageId}")
+                    _confirmationResponseLiveData.postValue(deliveredMessageId)
+
+                } catch (e: IOException) {
+                    Timber.d("tutaj sie wywalam")
+                    e.printStackTrace()
+                }
             }
         }
     }
@@ -177,7 +228,7 @@ class ClientServerViewModel : ViewModel() {
 
             val array = msg.serialize()
 
-            oStream.write(array.size.serialize(), 0, 81)
+            oStream.write(array.size.serialize(), 0, INT_SIZE)
             oStream.write(array, 0, array.size)
 
             _newMessageLiveData.postValue(msg)
@@ -190,10 +241,11 @@ class ClientServerViewModel : ViewModel() {
 
             //TODO nie moze byc kropki w nazwie pliku
             val nameAndSize = queryNameAndSize(context.contentResolver, uri)
-            val meta = FileMeta(nameAndSize.first.replace(" ",""), nameAndSize.second.toInt())
+            val meta = FileMeta(nameAndSize.first.replace(" ", ""), nameAndSize.second.toInt(), MY_MESSAGE_INDEX_COUNTER)
+            MY_MESSAGE_INDEX_COUNTER ++
 
             val array = meta.serialize()
-            oStream.write(array.size.serialize(), 0, 81)
+            oStream.write(array.size.serialize(), 0, INT_SIZE)
             oStream.write(array, 0, array.size)
             val bis = BufferedInputStream(context.contentResolver.openInputStream(uri))
 
@@ -212,6 +264,7 @@ class ClientServerViewModel : ViewModel() {
                 )
             }
             _fileSendingStatusLiveData.postValue(null)
+            _newMessageLiveData.postValue(Message(LocalTime.now(), meta.filename, true, meta.id))
 
         }
     }

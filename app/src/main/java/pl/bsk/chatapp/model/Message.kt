@@ -6,7 +6,9 @@ import java.time.LocalTime
 open class Message(
     val sendTime: LocalTime,
     val content: String,
-    var isMine: Boolean
+    var isMine: Boolean,
+    val id: Int,
+    var isRead: Boolean = false
 ):Serializable{
     fun sendTimeString():String = sendTime.toString().dropLast(4)
     override fun toString(): String {

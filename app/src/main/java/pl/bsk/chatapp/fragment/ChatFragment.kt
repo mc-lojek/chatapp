@@ -15,6 +15,7 @@ import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import pl.bsk.chatapp.FILE_CHOOSE_REQUEST_CODE
+import pl.bsk.chatapp.MY_MESSAGE_INDEX_COUNTER
 import pl.bsk.chatapp.R
 import pl.bsk.chatapp.adapter.MessageRecyclerAdapter
 import pl.bsk.chatapp.model.FileMessage
@@ -43,9 +44,22 @@ class ChatFragment : Fragment() {
                 Timber.d(getMimeType(newMessage.uri.path))
             }
 
-            adapter.addMessage(newMessage)
+            viewModel.messagesList.add(newMessage)
+            adapter.notifyItemInserted(viewModel.messagesList.size - 1)
             recycler.smoothScrollToPosition(adapter.getListSize() - 1)
             Timber.d("wiadomosc obserwuje ${newMessage}")
+        } else {
+            Timber.d("null tu jest w obserwerze")
+        }
+    }
+
+    private val responseObserver = Observer<Int?> { confirmedId ->
+        if (confirmedId != null) {
+
+            viewModel.messagesList.last { it.isMine && it.id == confirmedId }.isRead = true
+            adapter.notifyDataSetChanged()
+            //Todo to jest do zmiany bo kosztowne
+
         } else {
             Timber.d("null tu jest w obserwerze")
         }
@@ -84,6 +98,7 @@ class ChatFragment : Fragment() {
         setupViews()
 
         viewModel.newMessageLiveData.observe(viewLifecycleOwner, observer)
+        viewModel.confirmationResponseLiveData.observe(viewLifecycleOwner, responseObserver)
         viewModel.fileSendingStatusLiveData.observe(viewLifecycleOwner, fileObserver)
     }
 
@@ -92,7 +107,7 @@ class ChatFragment : Fragment() {
 
         linearLayoutManager = LinearLayoutManager(this.activity)
         recycler.layoutManager = linearLayoutManager
-        adapter = MessageRecyclerAdapter(mutableListOf()) {
+        adapter = MessageRecyclerAdapter(viewModel.messagesList) {
             if (it is FileMessage) {
                 val intent = Intent()
                 intent.action = Intent.ACTION_VIEW
@@ -111,7 +126,8 @@ class ChatFragment : Fragment() {
         requireActivity().findViewById<Button>(R.id.send_btn).setOnClickListener {
             val messageEditText = requireActivity().findViewById<EditText>(R.id.message_et)
             val content = messageEditText.text.toString()
-            val message = Message(LocalTime.now(), content, true)
+            val message = Message(LocalTime.now(), content, true, MY_MESSAGE_INDEX_COUNTER)
+            MY_MESSAGE_INDEX_COUNTER++
             messageEditText.text.clear()
             viewModel.sendMessageToServer(message)
         }

@@ -7,6 +7,8 @@ class FileMessage(
     sendTime: LocalTime,
     content: String,
     isMine: Boolean,
+    id: Int,
+    isRead: Boolean,
     val uri: Uri,
-) : Message(sendTime, content, isMine) {
+) : Message(sendTime, content, isMine, id, isRead) {
 }

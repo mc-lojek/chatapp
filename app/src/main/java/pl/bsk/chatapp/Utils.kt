@@ -2,6 +2,8 @@ package pl.bsk.chatapp
 
 import java.io.*
 
+var MY_MESSAGE_INDEX_COUNTER = 0
+
 fun Serializable.serialize(): ByteArray {
     val byteArrayOutputStream = ByteArrayOutputStream()
     val objectOutputStream = ObjectOutputStream(byteArrayOutputStream)

@@ -1,8 +1,10 @@
 package pl.bsk.chatapp.adapter
 
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.RecyclerView
@@ -28,6 +30,8 @@ class MessageRecyclerAdapter(
         this.messageList.add(message)
         notifyItemInserted(messageList.size - 1)
     }
+
+
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val viewHolder = LayoutInflater.from(parent.context).inflate(R.layout.view_message_item, parent, false)
@@ -59,6 +63,9 @@ class MessageRecyclerAdapter(
             else{
                 param.setMargins(0,0,200,0)
             }
+            v.findViewById<ImageView>(R.id.confirmation_btn).visibility =
+                if(message.isRead) View.VISIBLE
+                else View.INVISIBLE
             container.layoutParams = param
         }
     }

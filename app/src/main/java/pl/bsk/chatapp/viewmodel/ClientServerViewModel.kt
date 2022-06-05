@@ -15,16 +15,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import pl.bsk.chatapp.*
-import pl.bsk.chatapp.model.FileMessage
-import pl.bsk.chatapp.model.FileMeta
-import pl.bsk.chatapp.model.FileSendProgress
-import pl.bsk.chatapp.model.Message
+import pl.bsk.chatapp.model.*
 import timber.log.Timber
 import java.io.*
 import java.lang.Exception
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.security.PublicKey
 import java.time.LocalTime
 import kotlin.math.min
 import kotlin.system.measureTimeMillis
@@ -80,17 +78,33 @@ class ClientServerViewModel : ViewModel() {
         }
     }
 
-    fun connectToServer(serverAddress: String, action: (String) -> Unit) = viewModelScope.launch {
+    fun connectToServer(serverAddress: String,amIInitiator:Boolean, action: (String) -> Unit) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
-            Timber.d("connectuje sie")
+            Timber.d("lacze sie")
             try {
                 val serverAddr: InetAddress = InetAddress.getByName(serverAddress)
                 client2ServerSocket = Socket(serverAddr, SERVER_PORT)
                 oStream = client2ServerSocket.getOutputStream()
                 iResponseStream = client2ServerSocket.getInputStream()
-                Timber.d("listenuje")
+
+                if(amIInitiator){
+                    Timber.d("Jestem inicjatorem połączenia i wysylam swoj klucz publiczny")
+                    val keyPairRSASerialized = CryptoManager.keyPairRSA.public.serialize()
+                    oStream.write(keyPairRSASerialized.size.serialize(), 0, INT_SIZE)
+
+                    oStream.write(keyPairRSASerialized, 0, keyPairRSASerialized.size)
+                }
+                else{
+                    Timber.d("Tworze klucz sesyjny, szyfruje kluczem publicznym kolegi i wysylam")
+                    //todo tworzenie kluczu sesyjnego i szyfrowanie go kluczem publicznym kolegi i wysylamy
+                    CryptoManager.sessionKey=CryptoManager.generateSessionKey()
+
+                }
+
+
+                Timber.d("zaczynam nasluchiwanie")
                 listenResponse()
-                action("1")
+                action(ADDRESS_CONNECT_SUCCESSFUL)
             } catch (e: IOException) {
                 e.printStackTrace()
                 action(e.message ?: "Undefined error")
@@ -145,13 +159,19 @@ class ClientServerViewModel : ViewModel() {
                             readFileFromClient(obj)
                             sendConfirmationResponse(obj.id)
                         }
+                        is PublicKeyRSA ->{
+                            Timber.d("Dostalem klucz publiczny mojego kolegi i wyglada tak: ${obj.toString()}")
+                            val publicKeyRSA = obj as PublicKeyRSA
+                            CryptoManager.partnerPublicKey=publicKeyRSA.publicKey
+                        }
                         else -> {
                             Timber.e("Jakis inny typ niz powinien byc ?!")
                         }
                     }
                     if (serverAddress == null) {
                         serverAddress = clientSocket.inetAddress.hostName
-                        connectToServer(serverAddress!!, action)
+                        connectToServer(serverAddress!!,false, action)
+
                     }
 
                 } catch (e: IOException) {
@@ -198,7 +218,6 @@ class ClientServerViewModel : ViewModel() {
 
     private suspend fun listenResponse() {
         viewModelScope.launch(Dispatchers.IO) {
-            Timber.d("jestes tu?")
             while (true) {
                 try {
                     //najpierw czytamy jednego inta który mowi nam jaki rozmiar ma obiekt ktory przyjdzie jako kolejny

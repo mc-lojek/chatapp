@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/main_nav_graph"
-    app:startDestination="@id/initialFragment">
+    app:startDestination="@id/loginFragment">
 
     <fragment
         android:id="@+id/initialFragment"
@@ -19,4 +19,13 @@
         android:name="pl.bsk.chatapp.fragment.ChatFragment"
         android:label="fragment_chat"
         tools:layout="@layout/fragment_chat" />
+    <fragment
+        android:id="@+id/loginFragment"
+        android:name="pl.bsk.chatapp.fragment.LoginFragment"
+        android:label="fragment_login"
+        tools:layout="@layout/fragment_login" >
+        <action
+            android:id="@+id/action_loginFragment_to_initialFragment"
+            app:destination="@id/initialFragment" />
+    </fragment>
 </navigation>

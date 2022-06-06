@@ -1,6 +1,7 @@
 package pl.bsk.chatapp
 
 import android.os.Environment
+import pl.bsk.chatapp.model.EncodingDetails
 import pl.bsk.chatapp.model.FileMeta
 import pl.bsk.chatapp.model.Message
 import timber.log.Timber
@@ -39,10 +40,18 @@ import java.io.*
 //        val deserialized2 = deserialize<Message>(arr2)
 //        Timber.d("po deserializacji: ${deserialized2}")
 //
-        val int = 44
-        Timber.d("przed serializacja: ${int}")
-        val arr3 = int.serialize()
-        Timber.d("po serializacji ma taki rozmiar ${arr3.size} a tak wyglada ${arr3}")
-        val deserialized3 = arr3.deserialize() as Int
-        Timber.d("po deserializacji: ${deserialized3}")
+//        val int = 44
+//        Timber.d("przed serializacja: ${int}")
+//        val arr3 = int.serialize()
+//        Timber.d("po serializacji ma taki rozmiar ${arr3.size} a tak wyglada ${arr3}")
+//        val deserialized3 = arr3.deserialize() as Int
+//        Timber.d("po deserializacji: ${deserialized3}")
+
+
+        val encoding = EncodingDetails(CryptoManager.encodingType,100).serialize()
+        Timber.d("Rozmiar z ustawionym type: ${encoding.size}")
+        val encoding2 = EncodingDetails("nic",200).serialize()
+        Timber.d("Rozmiar z NULL type: ${encoding2.size}")
+
+
     }

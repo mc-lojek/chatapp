@@ -3,6 +3,7 @@ package pl.bsk.chatapp
 import android.content.SharedPreferences
 import android.security.keystore.KeyProperties
 import timber.log.Timber
+import java.io.Serializable
 import java.security.*
 import java.security.spec.PKCS8EncodedKeySpec
 import java.security.spec.X509EncodedKeySpec
@@ -12,20 +13,21 @@ import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.PBEKeySpec
+import javax.crypto.spec.SecretKeySpec
 
 object CryptoManager {
     private lateinit var prefs: SharedPreferences
     lateinit var sessionKey: SecretKey
     lateinit var partnerPublicKey: PublicKey
     lateinit var keyPairRSA: KeyPair
+    var encodingType: String = ECB_MODE
 
-
-    fun initialize(prefs: SharedPreferences){
-        this.prefs=prefs
+    fun initialize(prefs: SharedPreferences) {
+        this.prefs = prefs
 
     }
 
-    fun login(insertedPassword:String):Boolean{
+    fun login(insertedPassword: String): Boolean {
         val storedHash = prefs.getString(PASSWORD_HASH_KEY, "") ?: ""
         val insertedHash = hashPassword(insertedPassword)
 
@@ -34,16 +36,16 @@ object CryptoManager {
 
         if (storedHash.equals("")) {
             register(insertedHash)
-            val keys=generateRSAKeyPair()
+            val keys = generateRSAKeyPair()
             val encodedKeys = encodeRSAKeys(keys, insertedHash)
-            saveRSAKeysLocally(encodedKeys.first,encodedKeys.second)
-            keyPairRSA=keys
+            saveRSAKeysLocally(encodedKeys.first, encodedKeys.second)
+            keyPairRSA = keys
             return true
 
         } else if (storedHash.trim().equals(insertedHash.trim())) {
             Timber.d("haslo poprawne, chodzmy dalej")
             val newKeysFromMemory = getRSAKeysFromMemory()
-            keyPairRSA = decodeRSAKeys(insertedHash,newKeysFromMemory)
+            keyPairRSA = decodeRSAKeys(insertedHash, newKeysFromMemory)
             return true
 
         } else {
@@ -52,6 +54,7 @@ object CryptoManager {
             return false
         }
     }
+
     private fun register(hash: String) {
         with(prefs.edit()) {
             putString(PASSWORD_HASH_KEY, hash)
@@ -143,14 +146,39 @@ object CryptoManager {
     }
 
 
-    fun generateSessionKey():SecretKey{
+    fun generateSessionKey(): SecretKey {
         val keyGenerator = KeyGenerator.getInstance("AES")
         keyGenerator.init(256)
         return keyGenerator.generateKey()
     }
 
-    fun encryptSessionKeyWithPublicKey():String{
+    fun encryptSessionKeyWithPublicKey(): String {
+        val cipher = Cipher.getInstance("RSA/ECB/PKCS1PADDING")
+        cipher.init(Cipher.ENCRYPT_MODE, partnerPublicKey)
+        return cipher.doFinal(sessionKey.encoded).toBase64()
+    }
+
+    fun decryptSessionKeyWithPrivateKey(encryptedSessionKey: String) {
+        val cipher = Cipher.getInstance("RSA/ECB/PKCS1PADDING")
+        cipher.init(Cipher.DECRYPT_MODE, keyPairRSA.private)
+        val decodedSessionKeyBytes = cipher.doFinal(encryptedSessionKey.fromBase64())
+        sessionKey = SecretKeySpec(decodedSessionKeyBytes, 0, decodedSessionKeyBytes.size, "AES")
 
     }
+
+    fun encryptMessage(encodingMode:String,objectToEncrypt: Serializable): ByteArray {
+        val bytes = objectToEncrypt.serialize()
+        val cipher = Cipher.getInstance("AES/" + encodingMode + "/PKCS5PADDING")
+        cipher.init(Cipher.ENCRYPT_MODE, sessionKey)
+        return cipher.doFinal(bytes)
+    }
+
+    fun decryptMessage(encodedType:String,content:ByteArray):Serializable{
+        val cipher = Cipher.getInstance("AES/" + encodedType + "/PKCS5PADDING")
+        cipher.init(Cipher.DECRYPT_MODE, sessionKey)
+
+        return cipher.doFinal(content).deserialize()
+    }
+
 
 }

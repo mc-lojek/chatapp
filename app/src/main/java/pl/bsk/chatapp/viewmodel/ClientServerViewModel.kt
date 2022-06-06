@@ -4,9 +4,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.database.Cursor
 import android.net.Uri
-import android.os.Environment
 import android.provider.OpenableColumns
-import androidx.core.content.FileProvider
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -22,10 +20,8 @@ import java.lang.Exception
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.security.PublicKey
 import java.time.LocalTime
 import kotlin.math.min
-import kotlin.system.measureTimeMillis
 
 
 class ClientServerViewModel : ViewModel() {
@@ -42,11 +38,11 @@ class ClientServerViewModel : ViewModel() {
     private lateinit var oResponseStream: OutputStream
     private lateinit var iResponseStream: InputStream
 
-    private val objectSizeBuffer = ByteArray(INT_SIZE)
+    private val objectSizeBuffer = ByteArray(ENCODING_SIZE)
     private val objectBuffer = ByteArray(OBJECT_CHUNK_SIZE)
     private val fileBuffer = ByteArray(FILE_CHUNK_SIZE)
     private val fileOutputBuffer = ByteArray(FILE_CHUNK_SIZE)
-    private val responseBuffer = ByteArray(INT_SIZE)
+    private val responseBuffer = ByteArray(ENCODING_SIZE)
 
     private val _newMessageLiveData: MutableLiveData<Message?> = MutableLiveData(null)
     val newMessageLiveData = _newMessageLiveData as LiveData<Message?>
@@ -78,39 +74,59 @@ class ClientServerViewModel : ViewModel() {
         }
     }
 
-    fun connectToServer(serverAddress: String,amIInitiator:Boolean, action: (String) -> Unit) = viewModelScope.launch {
-        withContext(Dispatchers.IO) {
-            Timber.d("lacze sie")
-            try {
-                val serverAddr: InetAddress = InetAddress.getByName(serverAddress)
-                client2ServerSocket = Socket(serverAddr, SERVER_PORT)
-                oStream = client2ServerSocket.getOutputStream()
-                iResponseStream = client2ServerSocket.getInputStream()
+    fun connectToServer(serverAddress: String, amIInitiator: Boolean, action: (String) -> Unit) =
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                Timber.d("lacze sie")
+                try {
+                    val serverAddr: InetAddress = InetAddress.getByName(serverAddress)
+                    client2ServerSocket = Socket(serverAddr, SERVER_PORT)
+                    oStream = client2ServerSocket.getOutputStream()
+                    iResponseStream = client2ServerSocket.getInputStream()
 
-                if(amIInitiator){
-                    Timber.d("Jestem inicjatorem połączenia i wysylam swoj klucz publiczny")
-                    val keyPairRSASerialized = CryptoManager.keyPairRSA.public.serialize()
-                    oStream.write(keyPairRSASerialized.size.serialize(), 0, INT_SIZE)
+                    if (amIInitiator) {
+                        val keyPairRSASerialized =
+                            PublicKeyRSA(CryptoManager.keyPairRSA.public).serialize()
+                        Timber.d("Jestem inicjatorem połączenia i wysylam swoj klucz publiczny, ktory wyglada tak: ${CryptoManager.keyPairRSA.public.encoded.toBase64()}")
+                        val encodingType = NONE_MODE
 
-                    oStream.write(keyPairRSASerialized, 0, keyPairRSASerialized.size)
+                        oStream.write(
+                            EncodingDetails(
+                                encodingType,
+                                keyPairRSASerialized.size
+                            ).serialize(), 0, ENCODING_SIZE
+                        )
+                        oStream.write(keyPairRSASerialized, 0, keyPairRSASerialized.size)
+                    } else {
+                        Timber.d("Tworze klucz sesyjny, szyfruje kluczem publicznym kolegi i wysylam")
+                        //todo tworzenie kluczu sesyjnego i szyfrowanie go kluczem publicznym kolegi i wysylamy
+                        CryptoManager.sessionKey = CryptoManager.generateSessionKey()
+                        Timber.d("Wygenerowamy SessionKey wyglada tak: ${CryptoManager.sessionKey.encoded.toBase64()}")
+                        val encryptedSession =
+                            EncodedSessionKeyAES(CryptoManager.encryptSessionKeyWithPublicKey()).serialize()
+                        val encodingType = NONE_MODE
+
+                        oStream.write(
+                            EncodingDetails(
+                                encodingType,
+                                encryptedSession.size
+                            ).serialize(), 0, ENCODING_SIZE
+                        )
+
+                        oStream.write(encryptedSession, 0, encryptedSession.size)
+
+                    }
+
+
+                    Timber.d("zaczynam nasluchiwanie")
+                    listenResponse()
+                    action(ADDRESS_CONNECT_SUCCESSFUL)
+                } catch (e: IOException) {
+                    e.printStackTrace()
+                    action(e.message ?: "Undefined error")
                 }
-                else{
-                    Timber.d("Tworze klucz sesyjny, szyfruje kluczem publicznym kolegi i wysylam")
-                    //todo tworzenie kluczu sesyjnego i szyfrowanie go kluczem publicznym kolegi i wysylamy
-                    CryptoManager.sessionKey=CryptoManager.generateSessionKey()
-
-                }
-
-
-                Timber.d("zaczynam nasluchiwanie")
-                listenResponse()
-                action(ADDRESS_CONNECT_SUCCESSFUL)
-            } catch (e: IOException) {
-                e.printStackTrace()
-                action(e.message ?: "Undefined error")
             }
         }
-    }
 
     suspend fun communicateToClient(clientSocket: Socket, action: (String) -> Unit) {
         withContext(Dispatchers.IO) {
@@ -125,26 +141,29 @@ class ClientServerViewModel : ViewModel() {
                 try {
                     //najpierw czytamy jednego inta który mowi nam jaki rozmiar ma obiekt ktory przyjdzie jako kolejny
 
-                    iStream.read(objectSizeBuffer, 0, INT_SIZE)
+                    iStream.read(objectSizeBuffer, 0, ENCODING_SIZE)
                     //val objectSize = objectSizeBuffer.deserialize() as Int
 
-                    val objectSize = try {
+                    val objectEncodingDetails = try {
                         objectSizeBuffer.deserialize()
                     } catch (e: Exception) {
                         Timber.d("spadlem z rowerka przy deserializacji czegos")
                         continue
-                    } as Int
+                    } as EncodingDetails
 
-                    Timber.d("po konwersji na inta ${objectSize}")
+                    Timber.d("po konwersji na obiekt, rozmiar wiadomosci to: ${objectEncodingDetails.sizeOfMessage}")
+                    Timber.d("A odebrany typ kodowania tu: ${objectEncodingDetails.encodingType}")
+
 
                     //nastepnie czytamy ten obiekt w calosci z socketa
-                    iStream.read(objectBuffer, 0, objectSize)
+                    iStream.read(objectBuffer, 0, objectEncodingDetails.sizeOfMessage)
 
                     //deserializujemy go i sprawdzamy jakiego jest typu
                     val obj = try {
                         objectBuffer.deserialize()
                     } catch (e: Exception) {
-                        Timber.d("spadlem z rowerka przy deserializacji czegos")
+                        CryptoManager.decryptMessage(objectEncodingDetails.encodingType,objectBuffer)
+                        Timber.d("otrzymalem message, albo sie wywalilem")
                     }
 
                     when (obj) {
@@ -159,18 +178,23 @@ class ClientServerViewModel : ViewModel() {
                             readFileFromClient(obj)
                             sendConfirmationResponse(obj.id)
                         }
-                        is PublicKeyRSA ->{
-                            Timber.d("Dostalem klucz publiczny mojego kolegi i wyglada tak: ${obj.toString()}")
-                            val publicKeyRSA = obj as PublicKeyRSA
-                            CryptoManager.partnerPublicKey=publicKeyRSA.publicKey
+                        is PublicKeyRSA -> {
+                            Timber.d("Dostalem klucz publiczny mojego kolegi i wyglada tak: ${obj.publicKey.encoded.toBase64()}")
+                            CryptoManager.partnerPublicKey = obj.publicKey
+                        }
+                        is EncodedSessionKeyAES -> {
+                            Timber.d("Dostalem zaszyfrowany klucz sesyjny: ${obj.encodedSessionKey}")
+                            CryptoManager.decryptSessionKeyWithPrivateKey(obj.encodedSessionKey)
+                            Timber.d("SessionKey po odszyfrowaniu wyglada tak: ${CryptoManager.sessionKey.encoded.toBase64()}")
                         }
                         else -> {
-                            Timber.e("Jakis inny typ niz powinien byc ?!")
+
+
                         }
                     }
                     if (serverAddress == null) {
                         serverAddress = clientSocket.inetAddress.hostName
-                        connectToServer(serverAddress!!,false, action)
+                        connectToServer(serverAddress!!, false, action)
 
                     }
 
@@ -211,7 +235,16 @@ class ClientServerViewModel : ViewModel() {
             Timber.d("rec: ${received}, left: ${left}, got: ${got}")
         }
         val uri = Uri.parse(fileOut.path)
-        _newMessageLiveData.postValue(FileMessage(LocalTime.now(), fileMeta.filename, false, -1, false, uri))
+        _newMessageLiveData.postValue(
+            FileMessage(
+                LocalTime.now(),
+                fileMeta.filename,
+                false,
+                -1,
+                false,
+                uri
+            )
+        )
 
         fos.close()
     }
@@ -244,10 +277,11 @@ class ClientServerViewModel : ViewModel() {
 
     fun sendMessageToServer(msg: Message) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
+            val encodingType = CryptoManager.encodingType
+            Timber.d("Aktualny typ kodowania to: $encodingType")
 
-            val array = msg.serialize()
-
-            oStream.write(array.size.serialize(), 0, INT_SIZE)
+            val array = CryptoManager.encryptMessage(encodingType,msg)
+            oStream.write(EncodingDetails(encodingType, array.size).serialize(), 0, ENCODING_SIZE)
             oStream.write(array, 0, array.size)
 
             _newMessageLiveData.postValue(msg)
@@ -260,11 +294,16 @@ class ClientServerViewModel : ViewModel() {
 
             //TODO nie moze byc kropki w nazwie pliku
             val nameAndSize = queryNameAndSize(context.contentResolver, uri)
-            val meta = FileMeta(nameAndSize.first.replace(" ", ""), nameAndSize.second.toInt(), MY_MESSAGE_INDEX_COUNTER)
-            MY_MESSAGE_INDEX_COUNTER ++
+            val meta = FileMeta(
+                nameAndSize.first.replace(" ", ""),
+                nameAndSize.second.toInt(),
+                MY_MESSAGE_INDEX_COUNTER
+            )
+            MY_MESSAGE_INDEX_COUNTER++
 
+            val encodingType = CryptoManager.encodingType
             val array = meta.serialize()
-            oStream.write(array.size.serialize(), 0, INT_SIZE)
+            oStream.write(EncodingDetails(encodingType, array.size).serialize(), 0, ENCODING_SIZE)
             oStream.write(array, 0, array.size)
             val bis = BufferedInputStream(context.contentResolver.openInputStream(uri))
 

@@ -14,9 +14,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import pl.bsk.chatapp.FILE_CHOOSE_REQUEST_CODE
-import pl.bsk.chatapp.MY_MESSAGE_INDEX_COUNTER
-import pl.bsk.chatapp.R
+import pl.bsk.chatapp.*
 import pl.bsk.chatapp.adapter.MessageRecyclerAdapter
 import pl.bsk.chatapp.model.FileMessage
 import pl.bsk.chatapp.model.FileSendProgress
@@ -114,7 +112,7 @@ class ChatFragment : Fragment() {
                 intent.setDataAndType(it.uri, getMimeType(it.uri.path))
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-                if(checkAvailableApps(intent))
+                if (checkAvailableApps(intent))
                     startActivity(intent)
             }
         }
@@ -131,6 +129,16 @@ class ChatFragment : Fragment() {
             messageEditText.text.clear()
             viewModel.sendMessageToServer(message)
         }
+
+        requireActivity().findViewById<Switch>(R.id.encoding_switch)
+            .setOnCheckedChangeListener { compoundButton, b ->
+                if (b) {
+                    CryptoManager.encodingType = CBC_MODE
+                } else {
+                    CryptoManager.encodingType = ECB_MODE
+                }
+            }
+
 
         requireActivity().findViewById<Button>(R.id.send_file_btn).setOnClickListener {
             pickFileToSend()
@@ -168,7 +176,7 @@ class ChatFragment : Fragment() {
             PackageManager.MATCH_DEFAULT_ONLY
         )
         Timber.d("znaleziono tyle apek ${info.size}")
-        if (info.isEmpty()){
+        if (info.isEmpty()) {
             Toast.makeText(
                 requireContext(),
                 "No app found to open this file",

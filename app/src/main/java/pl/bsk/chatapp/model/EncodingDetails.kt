@@ -4,7 +4,8 @@ import java.io.Serializable
 
 class EncodingDetails(
     val encodingType:String,
-    val sizeOfMessage:Int
+    val sizeOfMessage:Int,
+    val iv: ByteArray
 ) :Serializable{
 
 }

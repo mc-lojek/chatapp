@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.MimeTypeMap
 import android.widget.*
+import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Observer
@@ -130,8 +131,8 @@ class ChatFragment : Fragment() {
             viewModel.sendMessageToServer(message)
         }
 
-        requireActivity().findViewById<Switch>(R.id.encoding_switch)
-            .setOnCheckedChangeListener { compoundButton, b ->
+        requireActivity().findViewById<SwitchCompat>(R.id.encoding_switch)
+            .setOnCheckedChangeListener { _, b ->
                 if (b) {
                     CryptoManager.encodingType = CBC_MODE
                 } else {

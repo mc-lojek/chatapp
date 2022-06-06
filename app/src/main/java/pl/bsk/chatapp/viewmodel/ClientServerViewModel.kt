@@ -16,11 +16,12 @@ import pl.bsk.chatapp.*
 import pl.bsk.chatapp.model.*
 import timber.log.Timber
 import java.io.*
-import java.lang.Exception
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.security.SecureRandom
 import java.time.LocalTime
+import javax.crypto.Cipher
 import kotlin.math.min
 
 
@@ -93,7 +94,8 @@ class ClientServerViewModel : ViewModel() {
                         oStream.write(
                             EncodingDetails(
                                 encodingType,
-                                keyPairRSASerialized.size
+                                keyPairRSASerialized.size,
+                                ByteArray(16)
                             ).serialize(), 0, ENCODING_SIZE
                         )
                         oStream.write(keyPairRSASerialized, 0, keyPairRSASerialized.size)
@@ -109,7 +111,8 @@ class ClientServerViewModel : ViewModel() {
                         oStream.write(
                             EncodingDetails(
                                 encodingType,
-                                encryptedSession.size
+                                encryptedSession.size,
+                                ByteArray(16)
                             ).serialize(), 0, ENCODING_SIZE
                         )
 
@@ -154,7 +157,6 @@ class ClientServerViewModel : ViewModel() {
                     Timber.d("po konwersji na obiekt, rozmiar wiadomosci to: ${objectEncodingDetails.sizeOfMessage}")
                     Timber.d("A odebrany typ kodowania tu: ${objectEncodingDetails.encodingType}")
 
-
                     //nastepnie czytamy ten obiekt w calosci z socketa
                     iStream.read(objectBuffer, 0, objectEncodingDetails.sizeOfMessage)
 
@@ -162,8 +164,12 @@ class ClientServerViewModel : ViewModel() {
                     val obj = try {
                         objectBuffer.deserialize()
                     } catch (e: Exception) {
-                        CryptoManager.decryptMessage(objectEncodingDetails.encodingType,objectBuffer)
                         Timber.d("otrzymalem message, albo sie wywalilem")
+                        CryptoManager.decryptMessage(
+                            objectEncodingDetails.encodingType, objectBuffer
+                                .copyOfRange(0, objectEncodingDetails.sizeOfMessage),
+                            objectEncodingDetails.iv
+                        )
                     }
 
                     when (obj) {
@@ -229,6 +235,9 @@ class ClientServerViewModel : ViewModel() {
         var got = 0
         while (received < fileMeta.size) {
             got = iStream.read(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
+
+            Timber.d("a taki sie odebral ${fileBuffer.toBase64()}")
+
             fos.write(fileBuffer, 0, got)
             received += got
             left -= got
@@ -280,8 +289,14 @@ class ClientServerViewModel : ViewModel() {
             val encodingType = CryptoManager.encodingType
             Timber.d("Aktualny typ kodowania to: $encodingType")
 
-            val array = CryptoManager.encryptMessage(encodingType,msg)
-            oStream.write(EncodingDetails(encodingType, array.size).serialize(), 0, ENCODING_SIZE)
+            val iv = CryptoManager.generateRandomIV()
+
+            val array = CryptoManager.encryptMessage(encodingType, msg, iv)
+            oStream.write(
+                EncodingDetails(encodingType, array.size, iv).serialize(),
+                0,
+                ENCODING_SIZE
+            )
             oStream.write(array, 0, array.size)
 
             _newMessageLiveData.postValue(msg)
@@ -301,9 +316,15 @@ class ClientServerViewModel : ViewModel() {
             )
             MY_MESSAGE_INDEX_COUNTER++
 
+            val iv = CryptoManager.generateRandomIV()
+
             val encodingType = CryptoManager.encodingType
             val array = meta.serialize()
-            oStream.write(EncodingDetails(encodingType, array.size).serialize(), 0, ENCODING_SIZE)
+            oStream.write(
+                EncodingDetails(encodingType, array.size, iv).serialize(),
+                0,
+                ENCODING_SIZE
+            )
             oStream.write(array, 0, array.size)
             val bis = BufferedInputStream(context.contentResolver.openInputStream(uri))
 
@@ -311,9 +332,16 @@ class ClientServerViewModel : ViewModel() {
             var sent = 0
             var left = meta.size
 
+            val cipher = Cipher.getInstance("AES/${CryptoManager.encodingType}/PKCS5PADDING")
+            cipher.init(Cipher.ENCRYPT_MODE, CryptoManager.sessionKey)
+
             while (sent < meta.size) {
                 got = bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
-                oStream.write(fileOutputBuffer, 0, got)
+
+                val temp = cipher.update(fileOutputBuffer, 0, got)
+                Timber.d("taki fragmencik sie zakodowal ${temp.toBase64()}")
+
+                oStream.write(temp, 0, got)
                 sent += got
                 left -= got
                 Timber.d("sent: ${sent}, left: ${left}, got: $got")

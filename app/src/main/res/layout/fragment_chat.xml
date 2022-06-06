@@ -21,7 +21,8 @@
             android:text="ECB"
             android:textSize="16sp" />
 
-        <Switch
+        <androidx.appcompat.widget.SwitchCompat
+            android:theme="@style/SelectionSwitch"
             android:id="@+id/encoding_switch"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

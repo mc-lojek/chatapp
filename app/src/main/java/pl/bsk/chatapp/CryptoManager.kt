@@ -51,6 +51,8 @@ object CryptoManager {
         } else {
             //Toast.makeText(requireContext(), "Podales zle haslo!", Toast.LENGTH_LONG).show()
             //todo przechodzi dalej ale pluje śmieci
+            //val keys = generateRSAKeyPair()
+            //keyPairRSA = keys
             return false
         }
     }
@@ -166,19 +168,42 @@ object CryptoManager {
 
     }
 
-    fun encryptMessage(encodingMode:String,objectToEncrypt: Serializable): ByteArray {
+    fun encryptMessage(encodingMode:String,objectToEncrypt: Serializable, iv: ByteArray): ByteArray {
+
+        val ivParams = IvParameterSpec(iv)
+
         val bytes = objectToEncrypt.serialize()
-        val cipher = Cipher.getInstance("AES/" + encodingMode + "/PKCS5PADDING")
-        cipher.init(Cipher.ENCRYPT_MODE, sessionKey)
+        Timber.d("Session key do enkrypcji jest taki ${sessionKey.encoded.toBase64()}")
+        val cipher = Cipher.getInstance("AES/$encodingMode/PKCS5PADDING")
+        if(encodingMode == "ECB")
+            cipher.init(Cipher.ENCRYPT_MODE, sessionKey)
+        else
+            cipher.init(Cipher.ENCRYPT_MODE, sessionKey, ivParams)
+        val encrypted = cipher.doFinal(bytes)
+        Timber.d("takie po kodowaniu${encrypted.toBase64()}")
         return cipher.doFinal(bytes)
     }
 
-    fun decryptMessage(encodedType:String,content:ByteArray):Serializable{
-        val cipher = Cipher.getInstance("AES/" + encodedType + "/PKCS5PADDING")
-        cipher.init(Cipher.DECRYPT_MODE, sessionKey)
+    fun decryptMessage(encodingMode:String,content:ByteArray, iv: ByteArray):Serializable{
+
+        val ivParams = IvParameterSpec(iv)
+
+        Timber.d("takie przed zdekodowaniem${content.toBase64()}")
+        val cipher = Cipher.getInstance("AES/$encodingMode/PKCS5PADDING")
+        Timber.d("Session key do dekrypcji jest taki ${sessionKey.encoded.toBase64()}")
+        if(encodingMode == "ECB")
+            cipher.init(Cipher.DECRYPT_MODE, sessionKey)
+        else
+            cipher.init(Cipher.DECRYPT_MODE, sessionKey, ivParams)
 
         return cipher.doFinal(content).deserialize()
     }
 
+    fun generateRandomIV(): ByteArray {
+        val iv = ByteArray(16)
+        val random = SecureRandom()
+        random.nextBytes(iv)
+        return iv
+    }
 
 }

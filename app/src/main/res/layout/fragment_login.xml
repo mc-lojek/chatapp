@@ -7,14 +7,13 @@
     tools:context=".fragment.LoginFragment">
 
     <TextView
-        android:layout_margin="20dp"
-        app:layout_constraintTop_toTopOf="parent"
         android:id="@+id/hello_tv"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/hello_blank_fragment" />
+        android:layout_margin="20dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <EditText
         android:id="@+id/password_et"

@@ -2,6 +2,7 @@ package pl.bsk.chatapp
 
 import android.content.SharedPreferences
 import android.security.keystore.KeyProperties
+import pl.bsk.chatapp.model.EncodingDetails
 import timber.log.Timber
 import java.io.Serializable
 import java.security.*
@@ -205,5 +206,19 @@ object CryptoManager {
         random.nextBytes(iv)
         return iv
     }
+
+    fun encryptEncodingDetails(details: EncodingDetails):ByteArray{
+        val cipher = Cipher.getInstance("AES/ECB/PKCS5PADDING")
+        cipher.init(Cipher.ENCRYPT_MODE, CryptoManager.sessionKey)
+        val serializedEncoding = details.serialize()
+        return cipher.doFinal(serializedEncoding)
+    }
+
+    fun decryptEncodingDetails(details: ByteArray):EncodingDetails{
+        val cipher = Cipher.getInstance("AES/ECB/PKCS5PADDING")
+        cipher.init(Cipher.DECRYPT_MODE, CryptoManager.sessionKey)
+        return cipher.doFinal(details).deserialize() as EncodingDetails
+    }
+
 
 }

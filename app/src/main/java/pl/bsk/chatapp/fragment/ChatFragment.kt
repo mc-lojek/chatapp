@@ -38,17 +38,11 @@ class ChatFragment : Fragment() {
     private val observer = Observer<Message?> { newMessage ->
         if (newMessage != null) {
 
-            if (newMessage is FileMessage) {
-                Timber.d("odebralem pliczek ${newMessage.uri.path}")
-                Timber.d(getMimeType(newMessage.uri.path))
-            }
-
             viewModel.messagesList.add(newMessage)
             adapter.notifyItemInserted(viewModel.messagesList.size - 1)
             recycler.smoothScrollToPosition(adapter.getListSize() - 1)
-            Timber.d("wiadomosc obserwuje ${newMessage}")
-        } else {
-            Timber.d("null tu jest w obserwerze")
+            } else {
+
         }
     }
 
@@ -60,7 +54,6 @@ class ChatFragment : Fragment() {
             //Todo to jest do zmiany bo kosztowne
 
         } else {
-            Timber.d("null tu jest w obserwerze")
         }
     }
 
@@ -176,7 +169,6 @@ class ChatFragment : Fragment() {
             intent,
             PackageManager.MATCH_DEFAULT_ONLY
         )
-        Timber.d("znaleziono tyle apek ${info.size}")
         if (info.isEmpty()) {
             Toast.makeText(
                 requireContext(),

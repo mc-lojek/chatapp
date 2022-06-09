@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import pl.bsk.chatapp.*
@@ -41,7 +42,10 @@ class LoginFragment : Fragment() {
 
     private fun login(password: String) {
         val loginSucceded=CryptoManager.login(password)
-        findNavController().navigate(R.id.action_loginFragment_to_connectFragment)
+        if(loginSucceded)
+            findNavController().navigate(R.id.action_loginFragment_to_connectFragment)
+        else
+            Toast.makeText(requireContext(), "Wrong password!", Toast.LENGTH_LONG).show()
     }
 
 

@@ -32,9 +32,6 @@ object CryptoManager {
         val storedHash = prefs.getString(PASSWORD_HASH_KEY, "") ?: ""
         val insertedHash = hashPassword(insertedPassword)
 
-        Timber.d("podane z klawiatury: ${insertedHash}koniec")
-        Timber.d("zapisane w prefsach: ${storedHash}koniec")
-
         if (storedHash.equals("")) {
             register(insertedHash)
             val keys = generateRSAKeyPair()
@@ -44,7 +41,6 @@ object CryptoManager {
             return true
 
         } else if (storedHash.trim().equals(insertedHash.trim())) {
-            Timber.d("haslo poprawne, chodzmy dalej")
             val newKeysFromMemory = getRSAKeysFromMemory()
             keyPairRSA = decodeRSAKeys(insertedHash, newKeysFromMemory)
             return true
@@ -72,10 +68,6 @@ object CryptoManager {
             password.encodeToByteArray()
         )
 
-        Timber.d("takie jest haslo do zaszyfrowania: ${password}")
-        Timber.d("taka jest byte array po zaszyfrowaniu: ${encodedhash.toBase64()}")
-
-
         return encodedhash.toBase64()
     }
 
@@ -85,8 +77,6 @@ object CryptoManager {
 
         generator.initialize(2048, SecureRandom())
         val keyPair = generator.genKeyPair()
-        Timber.d("Taki klucz sie wygenerowal public ${keyPair.public.encoded.toBase64()}")
-        Timber.d("Taki klucz sie wygenerowal private ${keyPair.private.encoded.toBase64()}")
         return keyPair
     }
 
@@ -99,7 +89,6 @@ object CryptoManager {
     fun encodeRSAKeys(rawKeys: KeyPair, localKey: String): Pair<String, String> {
 
         val aesKey = getAESKeyBasedOnHash(localKey)
-        Timber.d("klucz sie wygenerowal: ${aesKey.encoded.toBase64()}")
 
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
         val zeroBytes = ByteArray(cipher.blockSize)
@@ -128,8 +117,6 @@ object CryptoManager {
 
         val privateKey = KeyFactory.getInstance("RSA")
             .generatePrivate(PKCS8EncodedKeySpec(decodedPrivateKeyBytes))
-        Timber.d("Taki klucz po odszyfrowaniu z dysku public ${publicKey.encoded.toBase64()}")
-        Timber.d("Taki klucz po odszyfrowaniu z dysku  private ${privateKey.encoded.toBase64()}")
         return KeyPair(publicKey, privateKey)
     }
 
@@ -174,14 +161,12 @@ object CryptoManager {
         val ivParams = IvParameterSpec(iv)
 
         val bytes = objectToEncrypt.serialize()
-        Timber.d("Session key do enkrypcji jest taki ${sessionKey.encoded.toBase64()}")
         val cipher = Cipher.getInstance("AES/$encodingMode/PKCS5PADDING")
         if(encodingMode == "ECB")
             cipher.init(Cipher.ENCRYPT_MODE, sessionKey)
         else
             cipher.init(Cipher.ENCRYPT_MODE, sessionKey, ivParams)
         val encrypted = cipher.doFinal(bytes)
-        Timber.d("takie po kodowaniu${encrypted.toBase64()}")
         return cipher.doFinal(bytes)
     }
 
@@ -189,9 +174,7 @@ object CryptoManager {
 
         val ivParams = IvParameterSpec(iv)
 
-        Timber.d("takie przed zdekodowaniem${content.toBase64()}")
         val cipher = Cipher.getInstance("AES/$encodingMode/PKCS5PADDING")
-        Timber.d("Session key do dekrypcji jest taki ${sessionKey.encoded.toBase64()}")
         if(encodingMode == "ECB")
             cipher.init(Cipher.DECRYPT_MODE, sessionKey)
         else

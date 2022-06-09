@@ -9,7 +9,6 @@ import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.navigation.fragment.findNavController
 import pl.bsk.chatapp.R
-import pl.bsk.chatapp.doStuff
 import pl.bsk.chatapp.viewmodel.ClientServerViewModel
 import pub.devrel.easypermissions.AfterPermissionGranted
 import timber.log.Timber

@@ -80,7 +80,6 @@ class ClientServerViewModel : ViewModel() {
     fun connectToServer(serverAddress: String, amIInitiator: Boolean, action: (String) -> Unit) =
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                Timber.d("lacze sie")
                 try {
                     val serverAddr: InetAddress = InetAddress.getByName(serverAddress)
                     client2ServerSocket = Socket(serverAddr, SERVER_PORT)
@@ -90,7 +89,6 @@ class ClientServerViewModel : ViewModel() {
                     if (amIInitiator) {
                         val keyPairRSASerialized =
                             PublicKeyRSA(CryptoManager.keyPairRSA.public).serialize()
-                        Timber.d("Jestem inicjatorem połączenia i wysylam swoj klucz publiczny, ktory wyglada tak: ${CryptoManager.keyPairRSA.public.encoded.toBase64()}")
                         val encodingType = NONE_MODE
 
 
@@ -104,10 +102,8 @@ class ClientServerViewModel : ViewModel() {
                         )
                         oStream.write(keyPairRSASerialized, 0, keyPairRSASerialized.size)
                     } else {
-                        Timber.d("Tworze klucz sesyjny, szyfruje kluczem publicznym kolegi i wysylam")
                         //todo tworzenie kluczu sesyjnego i szyfrowanie go kluczem publicznym kolegi i wysylamy
                         CryptoManager.sessionKey = CryptoManager.generateSessionKey()
-                        Timber.d("Wygenerowamy SessionKey wyglada tak: ${CryptoManager.sessionKey.encoded.toBase64()}")
                         val encryptedSession =
                             EncodedSessionKeyAES(CryptoManager.encryptSessionKeyWithPublicKey()).serialize()
                         val encodingType = NONE_MODE
@@ -125,7 +121,6 @@ class ClientServerViewModel : ViewModel() {
                     }
 
 
-                    Timber.d("zaczynam nasluchiwanie")
                     listenResponse()
                     action(ADDRESS_CONNECT_SUCCESSFUL)
                 } catch (e: IOException) {
@@ -155,13 +150,9 @@ class ClientServerViewModel : ViewModel() {
                     } catch (e: UninitializedPropertyAccessException) {
                         objectSizeBuffer.deserialize() as EncodingDetails
                     } catch (e: Exception) {
-                        Timber.d("spadlem z rowerka przy deserializacji EncodingDetails ")
                         Timber.e(e)
                         continue
                     }
-
-                    Timber.d("po konwersji na obiekt, rozmiar wiadomosci to: ${objectEncodingDetails.sizeOfMessage}")
-                    Timber.d("A odebrany typ kodowania tu: ${objectEncodingDetails.encodingType}")
 
                     //nastepnie czytamy wlasciwy obiekt w calosci z socketa
                     iStream.read(objectBuffer, 0, objectEncodingDetails.sizeOfMessage)
@@ -170,7 +161,6 @@ class ClientServerViewModel : ViewModel() {
                     val obj = try {
                         objectBuffer.deserialize()
                     } catch (e: Exception) {
-                        Timber.d("otrzymalem zaszyfrowany message, albo sie wywalilem")
                         CryptoManager.decryptMessage(
                             objectEncodingDetails.encodingType, objectBuffer
                                 .copyOfRange(0, objectEncodingDetails.sizeOfMessage),
@@ -183,29 +173,22 @@ class ClientServerViewModel : ViewModel() {
                             obj.isMine = false
                             _newMessageLiveData.postValue(obj)
                             sendConfirmationResponse(obj.id)
-                            Timber.d("przeczytalem taka wiadomosc ${obj.content}")
                             val time = System.nanoTime() - start
                             Timber.d("receiving message with size ${obj.content.length} with time ${time}")
                         }
                         is FileMeta -> {
-                            Timber.d("Dostałem meta pliku ${obj.filename} a jego rozmiar to ${obj.size}")
                             readFileFromClient(obj, objectEncodingDetails)
                             sendConfirmationResponse(obj.id)
                             val time = System.nanoTime() - start
                             Timber.d("receiving fileMeta with time ${time}")
                         }
                         is PublicKeyRSA -> {
-                            Timber.d("Dostalem klucz publiczny mojego kolegi i wyglada tak: ${obj.publicKey.encoded.toBase64()}")
                             CryptoManager.partnerPublicKey = obj.publicKey
                         }
                         is EncodedSessionKeyAES -> {
-                            Timber.d("Dostalem zaszyfrowany klucz sesyjny: ${obj.encodedSessionKey}")
                             CryptoManager.decryptSessionKeyWithPrivateKey(obj.encodedSessionKey)
-                            Timber.d("SessionKey po odszyfrowaniu wyglada tak: ${CryptoManager.sessionKey.encoded.toBase64()}")
                         }
                         else -> {
-                            Timber.d("Otrzymalem obiekt, ktorego nie znam")
-
                         }
                     }
                     if (serverAddress == null) {
@@ -215,9 +198,7 @@ class ClientServerViewModel : ViewModel() {
                     }
 
                 } catch (e: IOException) {
-                    Timber.d("tutaj sie wywalam")
                     e.printStackTrace()
-                    //isServerCommunicationSocketRunning = false
                 }
             }
         }
@@ -225,7 +206,6 @@ class ClientServerViewModel : ViewModel() {
 
     private suspend fun sendConfirmationResponse(messageId: Int) {
         viewModelScope.launch(Dispatchers.IO) {
-            Timber.d("wysylam id wiadomosci ${messageId} ktora odebralem")
             oResponseStream.write(messageId.serialize(), 0, INT_SIZE)
         }
     }
@@ -234,7 +214,6 @@ class ClientServerViewModel : ViewModel() {
 
         val time = measureNanoTime {
 
-            Timber.d("zaczynam czytac plik")
             val fileOut = File("/sdcard/Download/${fileMeta.filename}")
             if (!fileOut.exists()) {
                 fileOut.createNewFile();
@@ -250,7 +229,6 @@ class ClientServerViewModel : ViewModel() {
                 val ivParams = IvParameterSpec(objectEncodingDetails.iv)
                 cipher.init(Cipher.DECRYPT_MODE, CryptoManager.sessionKey, ivParams)
             }
-            Timber.d("----IV: ${objectEncodingDetails.iv.toBase64()}")
 
 
             val metaToBeReceived = fileMeta.size - 16
@@ -280,19 +258,15 @@ class ClientServerViewModel : ViewModel() {
                 //w tym momencie jestesmy gotowi odszyfrowac plik
                 //odszyfrowywanie:
                 val temp = cipher.update(fileBuffer, 0, got)
-                //Timber.d("temp to: ${String(temp)}")
 
                 fos.write(temp, 0, temp.size)
                 received += got
                 left -= got
-                Timber.d("rec: ${received}, left: ${left}, got: ${got}")
             }
-            //Timber.d("Skonczylo odbieranie pliku i zostal tylko final")
             //tu musi byc final na 16
             got = iStream.read(fileBuffer, 0, 16)
             val temp = cipher.doFinal(fileBuffer, 0, got)
             fos.write(temp, 0, temp.size)
-            //Timber.d("Final wyglada tak: ${String(temp)}")
             val uri = Uri.parse(fileOut.path)
             _newMessageLiveData.postValue(
                 FileMessage(
@@ -315,21 +289,17 @@ class ClientServerViewModel : ViewModel() {
             while (true) {
                 try {
                     //najpierw czytamy jednego inta który mowi nam jaki rozmiar ma obiekt ktory przyjdzie jako kolejny
-                    Timber.d("czekam na potwierdzenie")
                     iResponseStream.read(responseBuffer, 0, INT_SIZE)
 
                     val deliveredMessageId = try {
                         responseBuffer.deserialize()
                     } catch (e: Exception) {
-                        Timber.d("spadlem z rowerka przy deserializacji czegos")
                         continue
                     } as Int
 
-                    Timber.d("dostalem potwierdzenie takiej wiadomosci ${deliveredMessageId}")
                     _confirmationResponseLiveData.postValue(deliveredMessageId)
 
                 } catch (e: IOException) {
-                    Timber.d("tutaj sie wywalam")
                     e.printStackTrace()
                 }
             }
@@ -340,7 +310,6 @@ class ClientServerViewModel : ViewModel() {
         withContext(Dispatchers.IO) {
             val time = measureNanoTime {
                 val encodingType = CryptoManager.encodingType
-                Timber.d("Aktualny typ kodowania to: $encodingType")
 
                 val iv = CryptoManager.generateRandomIV()
 
@@ -356,7 +325,6 @@ class ClientServerViewModel : ViewModel() {
                             iv
                         )
                     )
-                Timber.d("Size encodedDetails: ${encodedDetails.size}, const: $ENCODING_SIZE")
                 //wysylamy EncodingDetails
                 oStream.write(
                     encodedDetails,
@@ -385,7 +353,6 @@ class ClientServerViewModel : ViewModel() {
                     MY_MESSAGE_INDEX_COUNTER
                 )
                 MY_MESSAGE_INDEX_COUNTER++
-                Timber.d("Wywalamy zaokraglenie czyli: ${(nameAndSize.second.toInt() % 16)}")
                 val iv = CryptoManager.generateRandomIV()
 
                 val encodingType = CryptoManager.encodingType
@@ -428,12 +395,9 @@ class ClientServerViewModel : ViewModel() {
                     got = bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
 
                     val temp = cipher.update(fileOutputBuffer, 0, got)
-                    //Timber.d("taki fragmencik sie zakodowal ${temp.toBase64()}")
-                    Timber.d("left: $left, temp.size: ${temp.size}, roznica: ${left - temp.size}")
                     oStream.write(temp, 0, got)
                     sent += got
                     left -= got
-                    Timber.d("sent: ${sent}, left: ${left}, got: $got, temp.size: ${temp.size}")
                     _fileSendingStatusLiveData.postValue(
                         FileSendProgress(metaSizeToSent, sent)
                     )
@@ -441,7 +405,6 @@ class ClientServerViewModel : ViewModel() {
                 got = bis.read(fileOutputBuffer, 0, 16)
                 var temp = cipher.update(fileOutputBuffer, 0, got)
                 temp = cipher.doFinal()
-                Timber.d("doFinal size: ${temp.size}")
                 oStream.write(temp, 0, temp.size)
 
 

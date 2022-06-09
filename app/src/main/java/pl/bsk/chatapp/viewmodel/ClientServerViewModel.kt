@@ -24,6 +24,7 @@ import java.time.LocalTime
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import kotlin.math.min
+import kotlin.system.measureNanoTime
 
 
 class ClientServerViewModel : ViewModel() {
@@ -145,15 +146,15 @@ class ClientServerViewModel : ViewModel() {
             isServerCommunicationSocketRunning = true
             while (isServerCommunicationSocketRunning) {
                 try {
+                    val start = System.nanoTime()
                     //czytamy obiekt, ktory ma w sobie informacje o typie kodowania, rozmiarze wiadomosci i wektor iv
                     iStream.read(objectSizeBuffer, 0, ENCODING_SIZE)
 
                     val objectEncodingDetails = try {
                         CryptoManager.decryptEncodingDetails(objectSizeBuffer)
-                    }catch (e: UninitializedPropertyAccessException){
+                    } catch (e: UninitializedPropertyAccessException) {
                         objectSizeBuffer.deserialize() as EncodingDetails
-                    }
-                    catch (e: Exception) {
+                    } catch (e: Exception) {
                         Timber.d("spadlem z rowerka przy deserializacji EncodingDetails ")
                         Timber.e(e)
                         continue
@@ -183,11 +184,15 @@ class ClientServerViewModel : ViewModel() {
                             _newMessageLiveData.postValue(obj)
                             sendConfirmationResponse(obj.id)
                             Timber.d("przeczytalem taka wiadomosc ${obj.content}")
+                            val time = System.nanoTime() - start
+                            Timber.d("receiving message with size ${obj.content.length} with time ${time}")
                         }
                         is FileMeta -> {
                             Timber.d("Dostałem meta pliku ${obj.filename} a jego rozmiar to ${obj.size}")
                             readFileFromClient(obj, objectEncodingDetails)
                             sendConfirmationResponse(obj.id)
+                            val time = System.nanoTime() - start
+                            Timber.d("receiving fileMeta with time ${time}")
                         }
                         is PublicKeyRSA -> {
                             Timber.d("Dostalem klucz publiczny mojego kolegi i wyglada tak: ${obj.publicKey.encoded.toBase64()}")
@@ -226,77 +231,83 @@ class ClientServerViewModel : ViewModel() {
     }
 
     private fun readFileFromClient(fileMeta: FileMeta, objectEncodingDetails: EncodingDetails) {
-        Timber.d("zaczynam czytac plik")
-        val fileOut = File("/sdcard/Download/${fileMeta.filename}")
-        if (!fileOut.exists()) {
-            fileOut.createNewFile();
-        }
-        val fos = FileOutputStream(fileOut)
 
+        val time = measureNanoTime {
 
-        val cipher = Cipher.getInstance("AES/${objectEncodingDetails.encodingType}/PKCS5PADDING")
-        if (objectEncodingDetails.encodingType == "ECB")
-            cipher.init(Cipher.DECRYPT_MODE, CryptoManager.sessionKey)
-        else {
-            val ivParams = IvParameterSpec(objectEncodingDetails.iv)
-            cipher.init(Cipher.DECRYPT_MODE, CryptoManager.sessionKey, ivParams)
-        }
-        Timber.d("----IV: ${objectEncodingDetails.iv.toBase64()}")
-
-
-        val metaToBeReceived = fileMeta.size - 16
-        // duzy plik, trzeba chunkowac
-        var received = 0
-        var left = metaToBeReceived
-        var got = 0
-        while (received < metaToBeReceived) {
-            got = iStream.read(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
-
-            if (got == FILE_CHUNK_SIZE) {
-                //otrzymalismy calosc, mozemy odszyfrowac
-            } else if (left < FILE_CHUNK_SIZE) {
-                //koncowka musi byc pelna
-                while (got < left) {
-                    var gotNext = iStream.read(fileBuffer, got, left - got)
-                    got += gotNext
-                }
-            } else {
-                while (got < FILE_CHUNK_SIZE) {
-                    var gotNext = iStream.read(fileBuffer, got, FILE_CHUNK_SIZE - got)
-                    got += gotNext
-                }
-                //pobieramy tyle ile nam brakuje do skutku
-                //dostalismy mniej, trzeba zrobic szpagat
+            Timber.d("zaczynam czytac plik")
+            val fileOut = File("/sdcard/Download/${fileMeta.filename}")
+            if (!fileOut.exists()) {
+                fileOut.createNewFile();
             }
-            //w tym momencie jestesmy gotowi odszyfrowac plik
-            //odszyfrowywanie:
-            val temp = cipher.update(fileBuffer,0,got)
-            //Timber.d("temp to: ${String(temp)}")
+            val fos = FileOutputStream(fileOut)
 
+
+            val cipher =
+                Cipher.getInstance("AES/${objectEncodingDetails.encodingType}/PKCS5PADDING")
+            if (objectEncodingDetails.encodingType == "ECB")
+                cipher.init(Cipher.DECRYPT_MODE, CryptoManager.sessionKey)
+            else {
+                val ivParams = IvParameterSpec(objectEncodingDetails.iv)
+                cipher.init(Cipher.DECRYPT_MODE, CryptoManager.sessionKey, ivParams)
+            }
+            Timber.d("----IV: ${objectEncodingDetails.iv.toBase64()}")
+
+
+            val metaToBeReceived = fileMeta.size - 16
+            // duzy plik, trzeba chunkowac
+            var received = 0
+            var left = metaToBeReceived
+            var got = 0
+            while (received < metaToBeReceived) {
+                got = iStream.read(fileBuffer, 0, min(FILE_CHUNK_SIZE, left))
+
+                if (got == FILE_CHUNK_SIZE) {
+                    //otrzymalismy calosc, mozemy odszyfrowac
+                } else if (left < FILE_CHUNK_SIZE) {
+                    //koncowka musi byc pelna
+                    while (got < left) {
+                        var gotNext = iStream.read(fileBuffer, got, left - got)
+                        got += gotNext
+                    }
+                } else {
+                    while (got < FILE_CHUNK_SIZE) {
+                        var gotNext = iStream.read(fileBuffer, got, FILE_CHUNK_SIZE - got)
+                        got += gotNext
+                    }
+                    //pobieramy tyle ile nam brakuje do skutku
+                    //dostalismy mniej, trzeba zrobic szpagat
+                }
+                //w tym momencie jestesmy gotowi odszyfrowac plik
+                //odszyfrowywanie:
+                val temp = cipher.update(fileBuffer, 0, got)
+                //Timber.d("temp to: ${String(temp)}")
+
+                fos.write(temp, 0, temp.size)
+                received += got
+                left -= got
+                Timber.d("rec: ${received}, left: ${left}, got: ${got}")
+            }
+            //Timber.d("Skonczylo odbieranie pliku i zostal tylko final")
+            //tu musi byc final na 16
+            got = iStream.read(fileBuffer, 0, 16)
+            val temp = cipher.doFinal(fileBuffer, 0, got)
             fos.write(temp, 0, temp.size)
-            received += got
-            left -= got
-            Timber.d("rec: ${received}, left: ${left}, got: ${got}")
-        }
-        //Timber.d("Skonczylo odbieranie pliku i zostal tylko final")
-        //tu musi byc final na 16
-        got = iStream.read(fileBuffer, 0, 16)
-        val temp = cipher.doFinal(fileBuffer,0,got)
-        fos.write(temp, 0, temp.size)
-        //Timber.d("Final wyglada tak: ${String(temp)}")
-        val uri = Uri.parse(fileOut.path)
-        _newMessageLiveData.postValue(
-            FileMessage(
-                LocalTime.now(),
-                fileMeta.filename,
-                false,
-                -1,
-                false,
-                uri
+            //Timber.d("Final wyglada tak: ${String(temp)}")
+            val uri = Uri.parse(fileOut.path)
+            _newMessageLiveData.postValue(
+                FileMessage(
+                    LocalTime.now(),
+                    fileMeta.filename,
+                    false,
+                    -1,
+                    false,
+                    uri
+                )
             )
-        )
 
-        fos.close()
+            fos.close()
+        }
+        Timber.d("receiving file with size ${fileMeta.size} with time ${time}")
     }
 
     private suspend fun listenResponse() {
@@ -327,99 +338,126 @@ class ClientServerViewModel : ViewModel() {
 
     fun sendMessageToServer(msg: Message) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
-            val encodingType = CryptoManager.encodingType
-            Timber.d("Aktualny typ kodowania to: $encodingType")
+            val time = measureNanoTime {
+                val encodingType = CryptoManager.encodingType
+                Timber.d("Aktualny typ kodowania to: $encodingType")
 
-            val iv = CryptoManager.generateRandomIV()
+                val iv = CryptoManager.generateRandomIV()
 
-            //szyfrujemy tresc wiadomosci
-            val array = CryptoManager.encryptMessage(encodingType, msg, iv)
+                //szyfrujemy tresc wiadomosci
+                val array = CryptoManager.encryptMessage(encodingType, msg, iv)
 
-            //szyfrowanie EncodingDetails
-            val encodedDetails = CryptoManager.encryptEncodingDetails(EncodingDetails(encodingType, array.size, iv))
-            Timber.d("Size encodedDetails: ${encodedDetails.size}, const: $ENCODING_SIZE")
-            //wysylamy EncodingDetails
-            oStream.write(
-                encodedDetails,
-                0,
-                ENCODING_SIZE
-            )
-            //wysylamy zaszyfrowana wiadomosc
-            oStream.write(array, 0, array.size)
+                //szyfrowanie EncodingDetails
+                val encodedDetails =
+                    CryptoManager.encryptEncodingDetails(
+                        EncodingDetails(
+                            encodingType,
+                            array.size,
+                            iv
+                        )
+                    )
+                Timber.d("Size encodedDetails: ${encodedDetails.size}, const: $ENCODING_SIZE")
+                //wysylamy EncodingDetails
+                oStream.write(
+                    encodedDetails,
+                    0,
+                    ENCODING_SIZE
+                )
+                //wysylamy zaszyfrowana wiadomosc
+                oStream.write(array, 0, array.size)
 
-            _newMessageLiveData.postValue(msg)
-
+                _newMessageLiveData.postValue(msg)
+            }
+            Timber.d("sending message with size ${msg.content.length} with time ${time}")
         }
     }
 
     fun sendFile(uri: Uri, context: Context) = viewModelScope.launch {
         withContext(Dispatchers.IO) {
-
-            //TODO nie moze byc kropki w nazwie pliku
-            val nameAndSize = queryNameAndSize(context.contentResolver, uri)
-            val sizeEncrypted = nameAndSize.second.toInt() - (nameAndSize.second.toInt() % 16) + 16
-            val meta = FileMeta(
-                nameAndSize.first.replace(" ", ""),
-                sizeEncrypted,
-                MY_MESSAGE_INDEX_COUNTER
-            )
-            MY_MESSAGE_INDEX_COUNTER++
-            Timber.d("Wywalamy zaokraglenie czyli: ${(nameAndSize.second.toInt() % 16)}")
-            val iv = CryptoManager.generateRandomIV()
-
-            val encodingType = CryptoManager.encodingType
-
-            val array = meta.serialize()
-
-
-            //szyfrowanie encoding details
-            val encodedDetails = CryptoManager.encryptEncodingDetails(EncodingDetails(encodingType, array.size, iv))
-
-
-            oStream.write(
-                encodedDetails,
-                0,
-                ENCODING_SIZE
-            )
-            oStream.write(array, 0, array.size)
-            val bis = BufferedInputStream(context.contentResolver.openInputStream(uri))
-
-            var got = 0
-            var sent = 0
-            var left = meta.size - 16
-
-            val cipher = Cipher.getInstance("AES/${CryptoManager.encodingType}/PKCS5PADDING")
-            if (CryptoManager.encodingType == "ECB")
-                cipher.init(Cipher.ENCRYPT_MODE, CryptoManager.sessionKey)
-            else {
-                val ivParams = IvParameterSpec(iv)
-                cipher.init(Cipher.ENCRYPT_MODE, CryptoManager.sessionKey, ivParams)
-            }
-
-            val metaSizeToSent = meta.size - 16
-            while (sent < metaSizeToSent) {
-                got = bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
-
-                val temp = cipher.update(fileOutputBuffer, 0, got)
-                //Timber.d("taki fragmencik sie zakodowal ${temp.toBase64()}")
-                Timber.d("left: $left, temp.size: ${temp.size}, roznica: ${left - temp.size}")
-                oStream.write(temp, 0, got)
-                sent += got
-                left -= got
-                Timber.d("sent: ${sent}, left: ${left}, got: $got, temp.size: ${temp.size}")
-                _fileSendingStatusLiveData.postValue(
-                    FileSendProgress(metaSizeToSent, sent)
+            val time = measureNanoTime {
+                //TODO nie moze byc kropki w nazwie pliku
+                val nameAndSize = queryNameAndSize(context.contentResolver, uri)
+                val sizeEncrypted =
+                    nameAndSize.second.toInt() - (nameAndSize.second.toInt() % 16) + 16
+                val meta = FileMeta(
+                    nameAndSize.first.replace(" ", ""),
+                    sizeEncrypted,
+                    MY_MESSAGE_INDEX_COUNTER
                 )
+                MY_MESSAGE_INDEX_COUNTER++
+                Timber.d("Wywalamy zaokraglenie czyli: ${(nameAndSize.second.toInt() % 16)}")
+                val iv = CryptoManager.generateRandomIV()
+
+                val encodingType = CryptoManager.encodingType
+
+                val array = meta.serialize()
+
+
+                //szyfrowanie encoding details
+                val encodedDetails = CryptoManager.encryptEncodingDetails(
+                    EncodingDetails(
+                        encodingType,
+                        array.size,
+                        iv
+                    )
+                )
+
+
+                oStream.write(
+                    encodedDetails,
+                    0,
+                    ENCODING_SIZE
+                )
+                oStream.write(array, 0, array.size)
+                val bis = BufferedInputStream(context.contentResolver.openInputStream(uri))
+
+                var got = 0
+                var sent = 0
+                var left = meta.size - 16
+
+                val cipher = Cipher.getInstance("AES/${CryptoManager.encodingType}/PKCS5PADDING")
+                if (CryptoManager.encodingType == "ECB")
+                    cipher.init(Cipher.ENCRYPT_MODE, CryptoManager.sessionKey)
+                else {
+                    val ivParams = IvParameterSpec(iv)
+                    cipher.init(Cipher.ENCRYPT_MODE, CryptoManager.sessionKey, ivParams)
+                }
+
+                val metaSizeToSent = meta.size - 16
+                while (sent < metaSizeToSent) {
+                    got = bis.read(fileOutputBuffer, 0, min(FILE_CHUNK_SIZE, left))
+
+                    val temp = cipher.update(fileOutputBuffer, 0, got)
+                    //Timber.d("taki fragmencik sie zakodowal ${temp.toBase64()}")
+                    Timber.d("left: $left, temp.size: ${temp.size}, roznica: ${left - temp.size}")
+                    oStream.write(temp, 0, got)
+                    sent += got
+                    left -= got
+                    Timber.d("sent: ${sent}, left: ${left}, got: $got, temp.size: ${temp.size}")
+                    _fileSendingStatusLiveData.postValue(
+                        FileSendProgress(metaSizeToSent, sent)
+                    )
+                }
+                got = bis.read(fileOutputBuffer, 0, 16)
+                var temp = cipher.update(fileOutputBuffer, 0, got)
+                temp = cipher.doFinal()
+                Timber.d("doFinal size: ${temp.size}")
+                oStream.write(temp, 0, temp.size)
+
+
+
+                _fileSendingStatusLiveData.postValue(null)
+                _newMessageLiveData.postValue(
+                    Message(
+                        LocalTime.now(),
+                        meta.filename,
+                        true,
+                        meta.id
+                    )
+                )
+                Timber.d("sending file with size: ${meta.size}")
             }
-            got = bis.read(fileOutputBuffer, 0, 16)
-            var temp = cipher.update(fileOutputBuffer, 0, got)
-            temp = cipher.doFinal()
-            Timber.d("doFinal size: ${temp.size}")
-            oStream.write(temp, 0, temp.size)
-
-            _fileSendingStatusLiveData.postValue(null)
-            _newMessageLiveData.postValue(Message(LocalTime.now(), meta.filename, true, meta.id))
-
+            Timber.d("sending file with time: $time")
         }
     }
 
